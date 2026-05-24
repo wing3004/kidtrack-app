@@ -188,7 +188,9 @@ router.post("/report", async (req, res) => {
 ## 5. 주의사항
 이 소견서는 AI 보조 분석 도구에 의해 생성되었으며, 전문 의료진의 진단을 대체하지 않습니다.
 
-마크다운 형식으로 작성하세요.`;
+마크다운 형식으로 작성하세요.
+⚠️ 중요: 모든 텍스트 필드(summary, recommendation, behaviors의 name과 note)는 반드시 한국어로 작성하세요. 영어 사용 금지.
+`;
 
     const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",

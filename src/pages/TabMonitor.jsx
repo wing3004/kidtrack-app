@@ -131,99 +131,101 @@ export default function TabMonitor({ state, dispatch, onToast }) {
 
   // ── 녹화 중지 + 분석 ─────────────────────────────────────────
   const stopAndAnalyze = async () => {
-    clearInterval(timerRef.current);
-    clearInterval(frameCapRef.current);
-    setCamMode("analyzing");
+  clearInterval(timerRef.current);
+  clearInterval(frameCapRef.current);
+  setCamMode("analyzing");
 
-    const frames = mediaRecRef.current || [];
+  const frames = mediaRecRef.current || [];
 
-    // 마지막 프레임 1장 추가 캡처
-    if (videoRef.current && frames.length < 3) {
-      try {
-        const [blob] = await captureFrames(videoRef.current);
-        if (blob) frames.push(blob);
-      } catch {}
-    }
-
-    if (frames.length === 0) {
-      onToast("⚠️ 캡처된 프레임이 없습니다. 다시 시도해주세요.");
-      setCamMode("preview");
-      return;
-    }
-
+  // 마지막 프레임 추가 캡처
+  if (videoRef.current && frames.length < 3) {
     try {
-      onToast("🤖 AI가 영상을 분석 중입니다...");
+      const [blob] = await captureFrames(videoRef.current);
+      if (blob) frames.push(blob);
+    } catch {}
+  }
 
-      // 1. 프레임 분석
-      const result = await analyzeFrames({
-        frames,
-        childId: state.child.id || "child_001",
-        clipId:  `clip_${Date.now()}`,
-      });
+  if (frames.length === 0) {
+    onToast("⚠️ 캡처된 프레임이 없습니다. 다시 시도해주세요.");
+    setCamMode("preview");   // ← 반드시 복구
+    return;
+  }
 
-      setAnalysis(result.analysis);
-      setAnalyzedAt(result.analyzedAt);
-      setCapturedFrames(frames);
+  try {
+    onToast("🤖 AI가 영상을 분석 중입니다...");
 
-      // 클립 저장
-      dispatch({
-        type: "ADD_CLIP",
-        clip: {
-          id:       result.clipId,
-          time:     new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }),
-          label:    result.analysis.flagged ? "이상 행동 감지 구간" : "일상 영상",
-          duration: `${recordSec}초`,
-          flagged:  result.analysis.flagged,
-          approved: null,
-          analysis: result.analysis,
-        },
-      });
+    const result = await analyzeFrames({
+      frames,
+      childId: state.child.id || "child_001",
+      clipId:  `clip_${Date.now()}`,
+    });
 
-      // 2. AI 소견서 생성
-      // stopAndAnalyze 내부 — report 생성 후 이 코드 추가
-      const { report: reportText } = await generateReport({
+    setAnalysis(result.analysis);
+    setAnalyzedAt(result.analyzedAt);
+    setCapturedFrames(frames);
+
+    dispatch({
+      type: "ADD_CLIP",
+      clip: {
+        id:       result.clipId,
+        time:     new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }),
+        label:    result.analysis.flagged ? "이상 행동 감지 구간" : "일상 영상",
+        duration: `${recordSec}초`,
+        flagged:  result.analysis.flagged,
+        approved: null,
+        analysis: result.analysis,
+      },
+    });
+
+    const { report: reportText } = await generateReport({
+      childName:    state.child.name,
+      childDaysOld: state.child.daysOld,
+      analysis:     result.analysis,
+      clipCount:    state.todayClips.length + 1,
+      period:       "오늘",
+    });
+
+    setReport(reportText);
+
+    dispatch({
+      type: "ADD_REPORT",
+      report: {
+        id:           "report_" + result.clipId,
+        createdAt:    result.analyzedAt,
         childName:    state.child.name,
-        childDaysOld: state.child.daysOld,
+        clipId:       result.clipId,
         analysis:     result.analysis,
-        clipCount:    state.todayClips.length + 1,
-        period:       "오늘",
-      });
+        reportText,
+        sentToDoctor: false,
+      },
+    });
 
-      setReport(reportText);
-
-      // ★ 소견서를 전역 상태에 저장 (탭4에서 모아보기)
+    if (result.analysis.flagged) {
       dispatch({
-        type: "ADD_REPORT",
-        report: {
-          id:          "report_" + result.clipId,  // ← "report_" prefix 추가
-          createdAt:   result.analyzedAt,
-          childName:   state.child.name,
-          clipId:      result.clipId,
-          analysis:    result.analysis,
-          reportText,
-          sentToDoctor: false,
+        type: "ADD_NOTIFICATION",
+        notification: {
+          id:   "n_" + Date.now(),
+          text: `AI가 이상 행동을 감지했습니다. (신뢰도 ${result.analysis.confidence}%)`,
+          time: "방금",
+          read: false,
         },
       });
-
-      // ★ 이상 행동 감지 시 알림 추가
-      if (result.analysis.flagged) {
-        dispatch({
-          type: "ADD_NOTIFICATION",
-          notification: {
-            id:   "n_" + Date.now(),
-            text: `AI가 이상 행동을 감지했습니다. (신뢰도 ${result.analysis.confidence}%)`,
-            time: "방금",
-            read: false,
-          },
-        });
-      }
-
-    } catch (err) {
-      console.error(err);
-      onToast(`❌ 분석 실패: ${err.message}`);
-      setCamMode("preview");
     }
-  };
+
+    setCamMode("preview");   // ← 분석 완료 후 반드시 preview로 복구
+    setShowReport(true);
+
+    onToast(result.analysis.flagged
+      ? "⚠️ 이상 행동이 감지되었습니다. AI 소견서를 확인하세요."
+      : "✅ 분석 완료. 특이 소견이 없습니다."
+    );
+
+  } catch (err) {
+    console.error("분석 오류:", err);
+    onToast(`❌ 분석 실패: ${err.message}`);
+    setCamMode("preview");   // ← 에러 시에도 반드시 복구
+  }
+};
 
   // ── 의사에게 검토 요청 ────────────────────────────────────────
   const handleSendReview = async () => {

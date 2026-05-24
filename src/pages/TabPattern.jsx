@@ -60,62 +60,61 @@ export default function TabPattern({ state, onToast, onSwitchTab }) {
 
   // ── AI 정밀 분석 ──────────────────────────────────────────
   const runAI = async () => {
-    if (clips.length === 0) {
-      onToast("⚠️ 분석할 영상 데이터가 없습니다. 먼저 모니터링 탭에서 촬영해주세요.");
-      return;
-    }
-    setAnalyzing(true);
-    setAiText("");
-    setAiErr("");
+  if (clips.length === 0) {
+    onToast("⚠️ 분석할 영상 데이터가 없습니다.");
+    return;
+  }
+  setAnalyzing(true);
+  setAiText("");
+  setAiErr("");
 
-    try {
-      // 실제 클립 데이터를 요약해서 프롬프트 구성
-      const behaviorSummary = stats
-        ? Object.entries(stats.behaviorCount)
-            .sort(([, a], [, b]) => b - a)
-            .map(([name, count]) => `- ${name}: ${count}회`)
-            .join("\n") || "- 관찰된 이상 행동 없음"
-        : "- 데이터 없음";
+  try {
+    const behaviorSummary = stats
+      ? Object.entries(stats.behaviorCount)
+          .sort(([, a], [, b]) => b - a)
+          .map(([name, count]) => `- ${name}: ${count}회`)
+          .join("\n") || "- 관찰된 이상 행동 없음"
+      : "- 데이터 없음";
 
-      const severitySummary = stats
-        ? `경미: ${stats.severityDist.mild}건, 중등도: ${stats.severityDist.moderate}건, 심함: ${stats.severityDist.severe}건`
-        : "없음";
+    const prompt = `당신은 소아 신경발달 전문 AI입니다. 반드시 한국어로만 답변하세요.
 
-      const prompt = `당신은 소아 신경발달 전문 AI입니다.
-아래는 ${state.child.name}(생후 ${Math.floor(state.child.daysOld / 30)}개월)의 오늘 행동 영상 AI 분석 실제 데이터입니다.
+아래는 ${state.child.name}(생후 ${Math.floor(state.child.daysOld / 30)}개월)의 오늘 행동 분석 실제 데이터입니다.
 
 [분석 데이터]
-- 총 분석 영상 수: ${clips.length}개
-- 이상 행동 감지된 영상: ${stats?.flaggedClips.length || 0}개 (${stats?.flagRate || 0}%)
-- 평균 AI 신뢰도: ${Math.round(stats?.avgConfidence || 0)}%
-- 심각도 분포: ${severitySummary}
+- 총 분석 영상: ${clips.length}개
+- 이상 행동 감지: ${stats?.flaggedClips.length || 0}개 (${stats?.flagRate || 0}%)
+- 평균 신뢰도: ${Math.round(stats?.avgConfidence || 0)}%
 
-[감지된 행동 목록]
+[감지된 행동]
 ${behaviorSummary}
 
-[개별 영상 요약]
-${clips
-  .slice(0, 5)
-  .map(
-    (c, i) =>
-      `${i + 1}. ${c.time} "${c.label}" — ${c.analysis?.summary || "분석 없음"}`
-  )
-  .join("\n")}
+[영상별 요약]
+${clips.slice(0, 5).map((c, i) =>
+  `${i + 1}. ${c.time} — ${c.analysis?.summary || "분석 없음"}`
+).join("\n")}
 
-위 실제 데이터를 기반으로:
+위 데이터를 바탕으로 다음을 한국어 산문 3~4문장으로 작성하세요:
 1. 오늘 관찰된 행동 패턴의 임상적 의미
-2. 가장 주의해야 할 행동과 그 이유
-3. 보호자에게 권고할 사항
+2. 가장 주의해야 할 행동과 이유
+3. 보호자 권고사항
 
-3~4문장 한국어 산문으로 답변하세요. bullet point 없이 자연스러운 문단으로 작성하세요.`;
+bullet point 없이 자연스러운 문단으로만 작성하세요.`;
 
-      const result = await callAI(prompt);
-      setAiText(result);
-    } catch (e) {
-      setAiErr("서버 연결 오류: " + e.message);
+    const result = await callAI(prompt);
+
+    if (!result || result.trim() === "") {
+      throw new Error("AI 응답이 비어있습니다. 서버 연결을 확인하세요.");
     }
-    setAnalyzing(false);
-  };
+
+    setAiText(result);
+
+  } catch (e) {
+    console.error("패턴 분석 오류:", e);
+    setAiErr(e.message || "알 수 없는 오류가 발생했습니다.");
+  } finally {
+    setAnalyzing(false);   // ← finally로 변경 — 에러가 나도 반드시 로딩 해제
+  }
+};
 
   // ── 막대 그래프 렌더링 ────────────────────────────────────
   const maxBarVal = Math.max(...hourlyData.map((h) => h.total), 1);
