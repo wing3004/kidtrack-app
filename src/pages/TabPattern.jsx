@@ -1,0 +1,270 @@
+import { useState, useMemo } from "react";
+import { cn, callAI } from "../utils/helpers";
+import Button from "../components/Button";
+
+export default function TabPattern({ state, onToast, onSwitchTab }) {
+  const [analyzing, setAnalyzing] = useState(false);
+  const [aiText,    setAiText]    = useState("");
+  const [aiErr,     setAiErr]     = useState("");
+
+  const clips = state.todayClips;
+
+  // ── 실제 데이터에서 통계 계산 ─────────────────────────────
+  const stats = useMemo(() => {
+    if (clips.length === 0) return null;
+
+    const flaggedClips   = clips.filter((c) => c.flagged);
+    const approvedClips  = clips.filter((c) => c.approved === true);
+    const flagRate       = Math.round((flaggedClips.length / clips.length) * 100);
+
+    // 행동별 집계
+    const behaviorCount = {};
+    clips.forEach((c) => {
+      c.analysis?.behaviors?.forEach((b) => {
+        if (b.observed) {
+          behaviorCount[b.name] = (behaviorCount[b.name] || 0) + 1;
+        }
+      });
+    });
+
+    // 평균 신뢰도
+    const avgConfidence = clips
+      .filter((c) => c.analysis?.confidence !== undefined)
+      .reduce((sum, c, _, arr) => sum + c.analysis.confidence / arr.length, 0);
+
+    // 심각도 분포
+    const severityDist = { none: 0, mild: 0, moderate: 0, severe: 0 };
+    clips.forEach((c) =>
+      c.analysis?.behaviors?.forEach((b) => {
+        if (b.observed && severityDist[b.severity] !== undefined)
+          severityDist[b.severity]++;
+      })
+    );
+
+    return { flaggedClips, approvedClips, flagRate, behaviorCount, avgConfidence, severityDist };
+  }, [clips]);
+
+  // ── 시간대별 감지 현황 (막대 그래프용) ────────────────────
+  const hourlyData = useMemo(() => {
+    const hours = Array.from({ length: 24 }, (_, h) => ({ hour: h, total: 0, flagged: 0 }));
+    clips.forEach((c) => {
+      const h = parseInt(c.time?.split(":")[0] || "0", 10);
+      if (h >= 0 && h < 24) {
+        hours[h].total++;
+        if (c.flagged) hours[h].flagged++;
+      }
+    });
+    // 데이터 있는 시간대만
+    return hours.filter((h) => h.total > 0);
+  }, [clips]);
+
+  // ── AI 정밀 분석 ──────────────────────────────────────────
+  const runAI = async () => {
+    if (clips.length === 0) {
+      onToast("⚠️ 분석할 영상 데이터가 없습니다. 먼저 모니터링 탭에서 촬영해주세요.");
+      return;
+    }
+    setAnalyzing(true);
+    setAiText("");
+    setAiErr("");
+
+    try {
+      // 실제 클립 데이터를 요약해서 프롬프트 구성
+      const behaviorSummary = stats
+        ? Object.entries(stats.behaviorCount)
+            .sort(([, a], [, b]) => b - a)
+            .map(([name, count]) => `- ${name}: ${count}회`)
+            .join("\n") || "- 관찰된 이상 행동 없음"
+        : "- 데이터 없음";
+
+      const severitySummary = stats
+        ? `경미: ${stats.severityDist.mild}건, 중등도: ${stats.severityDist.moderate}건, 심함: ${stats.severityDist.severe}건`
+        : "없음";
+
+      const prompt = `당신은 소아 신경발달 전문 AI입니다.
+아래는 ${state.child.name}(생후 ${Math.floor(state.child.daysOld / 30)}개월)의 오늘 행동 영상 AI 분석 실제 데이터입니다.
+
+[분석 데이터]
+- 총 분석 영상 수: ${clips.length}개
+- 이상 행동 감지된 영상: ${stats?.flaggedClips.length || 0}개 (${stats?.flagRate || 0}%)
+- 평균 AI 신뢰도: ${Math.round(stats?.avgConfidence || 0)}%
+- 심각도 분포: ${severitySummary}
+
+[감지된 행동 목록]
+${behaviorSummary}
+
+[개별 영상 요약]
+${clips
+  .slice(0, 5)
+  .map(
+    (c, i) =>
+      `${i + 1}. ${c.time} "${c.label}" — ${c.analysis?.summary || "분석 없음"}`
+  )
+  .join("\n")}
+
+위 실제 데이터를 기반으로:
+1. 오늘 관찰된 행동 패턴의 임상적 의미
+2. 가장 주의해야 할 행동과 그 이유
+3. 보호자에게 권고할 사항
+
+3~4문장 한국어 산문으로 답변하세요. bullet point 없이 자연스러운 문단으로 작성하세요.`;
+
+      const result = await callAI(prompt);
+      setAiText(result);
+    } catch (e) {
+      setAiErr("서버 연결 오류: " + e.message);
+    }
+    setAnalyzing(false);
+  };
+
+  // ── 막대 그래프 렌더링 ────────────────────────────────────
+  const maxBarVal = Math.max(...hourlyData.map((h) => h.total), 1);
+
+  if (clips.length === 0) {
+    return (
+      <div className="p-4 flex flex-col items-center justify-center h-64 text-center">
+        <p className="text-4xl mb-3">📊</p>
+        <p className="text-slate-600 font-semibold text-sm">아직 분석 데이터가 없습니다</p>
+        <p className="text-slate-400 text-xs mt-1">
+          모니터링 탭에서 영상을 촬영하면<br />여기서 패턴을 확인할 수 있습니다.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 space-y-4">
+
+      {/* 오늘의 통계 요약 */}
+      <div className="grid grid-cols-2 gap-2">
+        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+          <p className="text-[10px] text-slate-400 uppercase tracking-wide">이상 감지율</p>
+          <p className={cn(
+            "text-3xl font-bold mt-1",
+            (stats?.flagRate || 0) > 30 ? "text-red-500" : "text-green-500"
+          )}>
+            {stats?.flagRate || 0}%
+          </p>
+          <p className="text-[10px] text-slate-400 mt-0.5">
+            {clips.length}개 중 {stats?.flaggedClips.length || 0}개 감지
+          </p>
+        </div>
+        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+          <p className="text-[10px] text-slate-400 uppercase tracking-wide">AI 평균 신뢰도</p>
+          <p className="text-3xl font-bold mt-1 text-blue-600">
+            {Math.round(stats?.avgConfidence || 0)}%
+          </p>
+          <p className="text-[10px] text-slate-400 mt-0.5">오늘 분석 기준</p>
+        </div>
+      </div>
+
+      {/* 시간대별 막대 그래프 */}
+      {hourlyData.length > 0 && (
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <h3 className="text-sm font-bold text-slate-800 mb-3">시간대별 촬영 현황</h3>
+          <div className="flex items-end gap-1.5 h-24">
+            {hourlyData.map((h) => (
+              <div key={h.hour} className="flex-1 flex flex-col items-center gap-0.5">
+                <div className="w-full flex flex-col justify-end" style={{ height: "72px" }}>
+                  {/* 전체 바 */}
+                  <div
+                    className="w-full rounded-t relative overflow-hidden"
+                    style={{ height: `${(h.total / maxBarVal) * 72}px` }}
+                  >
+                    <div className="absolute inset-0 bg-blue-200" />
+                    {h.flagged > 0 && (
+                      <div
+                        className="absolute bottom-0 left-0 right-0 bg-red-400"
+                        style={{ height: `${(h.flagged / h.total) * 100}%` }}
+                      />
+                    )}
+                  </div>
+                </div>
+                <span className="text-[8px] text-slate-400">{h.hour}시</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-3 mt-2 text-[10px] text-slate-400">
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded bg-blue-200 inline-block" />일반
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded bg-red-400 inline-block" />이상 감지
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* 감지된 행동 순위 */}
+      {stats && Object.keys(stats.behaviorCount).length > 0 && (
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <h3 className="text-sm font-bold text-slate-800 mb-3">감지된 행동 빈도</h3>
+          <div className="space-y-2">
+            {Object.entries(stats.behaviorCount)
+              .sort(([, a], [, b]) => b - a)
+              .map(([name, count]) => {
+                const maxCount = Math.max(...Object.values(stats.behaviorCount));
+                return (
+                  <div key={name} className="flex items-center gap-2">
+                    <span className="text-xs text-slate-600 w-28 flex-shrink-0 truncate">{name}</span>
+                    <div className="flex-1 bg-slate-100 rounded-full h-2">
+                      <div
+                        className="bg-red-400 h-2 rounded-full transition-all"
+                        style={{ width: `${(count / maxCount) * 100}%` }}
+                      />
+                    </div>
+                    <span className="text-xs font-bold text-slate-600 w-6 text-right">{count}</span>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
+      {/* AI 정밀 분석 버튼 */}
+      <Button variant="primary" onClick={runAI} disabled={analyzing}>
+        {analyzing ? "🤖 AI 분석 중..." : "🤖 AI 패턴 정밀 분석 실행"}
+      </Button>
+
+      {/* AI 분석 결과 */}
+      {(analyzing || aiText || aiErr) && (
+        <div className={cn(
+          "rounded-xl p-4 text-sm leading-relaxed border",
+          aiErr
+            ? "bg-red-50 border-red-200 text-red-700"
+            : "bg-blue-50 border-blue-200 text-blue-900"
+        )}>
+          {analyzing && (
+            <div className="flex items-center gap-2 text-blue-700">
+              <span className="animate-pulse">🤖</span> 실제 데이터 기반 분석 중...
+            </div>
+          )}
+          {aiText && (
+            <>
+              <p className="font-bold text-blue-700 mb-2">🤖 AI 패턴 분석 결과</p>
+              <p className="whitespace-pre-wrap">{aiText}</p>
+            </>
+          )}
+          {aiErr && <p>⚠️ {aiErr}</p>}
+        </div>
+      )}
+
+      {/* 솔루션 탭 이동 */}
+      {stats && stats.flaggedClips.length > 0 && (
+        <div className="bg-red-50 border border-red-200 p-4 rounded-xl">
+          <p className="text-sm font-bold text-red-700 mb-1">⚠️ 이상 행동 패턴 감지됨</p>
+          <p className="text-xs text-red-600 mb-3">
+            오늘 {stats.flaggedClips.length}건의 이상 행동이 관찰되었습니다.
+            맞춤 처방 탭에서 권장 활동을 확인하세요.
+          </p>
+          <button
+            onClick={() => onSwitchTab(4)}
+            className="w-full bg-white border border-red-200 text-red-600 text-xs font-bold py-2 rounded-lg hover:bg-red-50 transition-colors"
+          >
+            💡 맞춤 처방 보기 →
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
