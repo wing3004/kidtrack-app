@@ -8,7 +8,13 @@ dotenv.config();
 
 const app = express();
 
-app.use(cors({ origin: ["http://localhost:5173", "http://localhost:4173"] }));
+app.use(cors({
+  origin: [
+    "http://localhost:5173",
+    "http://localhost:4173",
+    "https://kidtrack-app.vercel.app",  // ← 본인 Vercel URL
+  ],
+}));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
