@@ -126,7 +126,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState(0);
   const [showNotif, setShowNotif] = useState(false);
   const [toast, setToast]   = useState(null);
-  const [isSetup, setIsSetup] = useState(false); // 초기 설정 완료 여부
+  const [isSetup, setIsSetup] = useState(false);
+  const [showLangMenu, setShowLangMenu] = useState(false);
 
   // localStorage에서 아동 정보 복원
   useEffect(() => {
@@ -146,9 +147,7 @@ export default function App() {
 
   // 소견서 변경 시 localStorage 동기화
   useEffect(() => {
-    if (state.allReports.length > 0) {
-      localStorage.setItem("kidtrack_reports", JSON.stringify(state.allReports));
-    }
+    localStorage.setItem("kidtrack_reports", JSON.stringify(state.allReports));
   }, [state.allReports]);
 
   const handleSetup = (childInfo) => {
@@ -182,7 +181,50 @@ export default function App() {
               </span>
             </div>
             <div className="flex items-center gap-4">
-              <button className="text-sm font-semibold opacity-80">🌐 KR</button>
+              <div className="relative">
+                <button
+                  className="text-sm font-semibold opacity-80 flex items-center gap-1"
+                  onClick={() => setShowLangMenu((v) => !v)}
+                >
+                  🌐 KR <span className="text-[10px]">▾</span>
+                </button>
+                {showLangMenu && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setShowLangMenu(false)}
+                    />
+                    <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-lg border border-slate-200 z-50 py-1 min-w-[110px]">
+                      {[
+                        { code: "KR", label: "한국어" },
+                        { code: "EN", label: "English" },
+                        { code: "JP", label: "日本語" },
+                        { code: "CN", label: "中文" },
+                      ].map((lang) => (
+                        <button
+                          key={lang.code}
+                          className={cn(
+                            "w-full px-4 py-2 text-left text-xs transition-colors",
+                            lang.code === "KR"
+                              ? "font-bold text-blue-600 bg-blue-50"
+                              : "text-slate-600 hover:bg-slate-50"
+                          )}
+                          onClick={() => {
+                            setShowLangMenu(false);
+                            if (lang.code !== "KR")
+                              setToast("🌐 해당 언어는 아직 준비 중입니다.");
+                          }}
+                        >
+                          {lang.label}
+                          {lang.code === "KR" && (
+                            <span className="ml-1 text-[9px]">✓</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
               <button className="relative p-1" onClick={() => setShowNotif(true)}>
                 <span className="text-lg">🔔</span>
                 {unreadCount > 0 && (

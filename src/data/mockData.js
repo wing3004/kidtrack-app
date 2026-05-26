@@ -21,6 +21,6 @@ export const TABS = [
   { id: "monitor",  label: "모니터링", icon: "🏠" },
   { id: "homecam",  label: "홈캠 연동", icon: "📹" },
   { id: "pattern",  label: "패턴 분석", icon: "📊" },
-  { id: "registry", label: "소견서",    icon: "📁" },
-  { id: "solution", label: "맞춤 처방", icon: "💡" },
+  { id: "registry", label: "관찰기록",   icon: "📁" },
+  { id: "solution", label: "활동 가이드", icon: "💡" },
 ];

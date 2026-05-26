@@ -35,11 +35,16 @@ export function reducer(state, action) {
         ),
       };
 
-    // AI 소견서 저장
     case "ADD_REPORT":
       return {
         ...state,
         allReports: [action.report, ...state.allReports],
+      };
+
+    case "DELETE_REPORT":
+      return {
+        ...state,
+        allReports: state.allReports.filter((r) => r.id !== action.reportId),
       };
 
     // 의사 권고 업데이트

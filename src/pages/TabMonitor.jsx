@@ -329,6 +329,7 @@ export default function TabMonitor({ state, dispatch, onToast }) {
           approved: null,
           analysis: mergedAnalysis,
           keyFrames,
+          source:   "app",
         },
       });
 
@@ -579,13 +580,7 @@ export default function TabMonitor({ state, dispatch, onToast }) {
           <p className="text-xs font-bold text-slate-300 uppercase tracking-wide">
             📊 모션 관찰 요약
           </p>
-          <div className="grid grid-cols-3 gap-2">
-            <div className="bg-slate-600 rounded-lg p-2 text-center">
-              <p className="text-xl font-bold text-white">
-                {analysis.localMotionData.observationScore}
-              </p>
-              <p className="text-[9px] text-slate-400 mt-0.5">관찰 점수</p>
-            </div>
+          <div className="grid grid-cols-2 gap-2">
             <div className="bg-slate-600 rounded-lg p-2 text-center">
               <p className="text-xl font-bold text-white">
                 {analysis.localMotionData.frameCount}

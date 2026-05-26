@@ -5,9 +5,12 @@ import Modal from "../components/Modal";
 import Button from "../components/Button";
 
 export default function TabHomecam({ state, dispatch, onToast }) {
-  const [openClip,    setOpenClip]    = useState(null);
-  const [deleteTarget, setDeleteTarget] = useState(null); // 삭제 확인 대상
-  const [filter,      setFilter]      = useState("all"); // all | flagged | approved
+  const [openClip,      setOpenClip]      = useState(null);
+  const [deleteTarget,  setDeleteTarget]  = useState(null);
+  const [filter,        setFilter]        = useState("all"); // all | flagged | approved
+  const [sourceFilter,  setSourceFilter]  = useState("all"); // all | app | homecam
+  const [showAddCam,    setShowAddCam]    = useState(false);
+  const [newCamName,    setNewCamName]    = useState("");
 
   const handleApprove = (clipId) => {
     dispatch({ type: "APPROVE_CLIP", clipId, value: true });
@@ -26,6 +29,8 @@ export default function TabHomecam({ state, dispatch, onToast }) {
 
   // 필터 적용
   const filtered = state.todayClips.filter((c) => {
+    if (sourceFilter === "app"     && c.source !== "app")     return false;
+    if (sourceFilter === "homecam" && c.source !== "homecam") return false;
     if (filter === "flagged")  return c.flagged;
     if (filter === "approved") return c.approved === true;
     return true;
@@ -40,8 +45,77 @@ export default function TabHomecam({ state, dispatch, onToast }) {
   const freqColor = { none:"text-slate-400", occasional:"text-amber-500", frequent:"text-orange-500" };
   const freqLabel = { none:"관찰 안됨", occasional:"가끔 관찰", frequent:"자주 관찰" };
 
+  const appCount    = state.todayClips.filter((c) => c.source === "app" || !c.source).length;
+  const homecamCount = state.todayClips.filter((c) => c.source === "homecam").length;
+
   return (
     <div className="p-4 space-y-4">
+
+      {/* 카메라 리스트 */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100">
+          <h3 className="text-sm font-bold text-slate-800">📹 연결된 카메라</h3>
+          <button
+            onClick={() => setShowAddCam(true)}
+            className="text-[11px] text-blue-600 font-bold hover:underline"
+          >
+            + 홈캠 추가
+          </button>
+        </div>
+        {/* 기기 카메라 */}
+        <div className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-50">
+          <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center text-base flex-shrink-0">📱</div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-slate-800">내 기기 카메라</p>
+            <p className="text-[10px] text-slate-400">앱 촬영 · 영상 {appCount}개</p>
+          </div>
+          <span className="text-[10px] font-bold bg-green-100 text-green-600 px-1.5 py-0.5 rounded">연결됨</span>
+        </div>
+        {/* 등록된 홈캠 목록 */}
+        {state.cameras.length === 0 ? (
+          <div className="px-4 py-3 text-center">
+            <p className="text-[10px] text-slate-400">등록된 홈캠이 없습니다.</p>
+          </div>
+        ) : (
+          state.cameras.map((cam) => (
+            <div key={cam.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-50 last:border-0">
+              <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center text-base flex-shrink-0">🏠</div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-slate-800">{cam.name || "홈캠"}</p>
+                <p className="text-[10px] text-slate-400">홈캠 촬영</p>
+              </div>
+              <span className={cn(
+                "text-[10px] font-bold px-1.5 py-0.5 rounded",
+                cam.status === "online" ? "bg-green-100 text-green-600" : "bg-slate-100 text-slate-400"
+              )}>
+                {cam.status === "online" ? "연결됨" : "오프라인"}
+              </span>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* 소스 필터 탭 */}
+      <div className="flex gap-2">
+        {[
+          { key: "all",     label: `전체 (${state.todayClips.length})` },
+          { key: "app",     label: `📱 앱 (${appCount})` },
+          { key: "homecam", label: `🏠 홈캠 (${homecamCount})` },
+        ].map((f) => (
+          <button
+            key={f.key}
+            onClick={() => setSourceFilter(f.key)}
+            className={cn(
+              "flex-1 py-1.5 text-[11px] font-bold rounded-lg border transition-colors",
+              sourceFilter === f.key
+                ? "bg-slate-800 text-white border-slate-800"
+                : "bg-white text-slate-500 border-slate-200 hover:border-slate-400"
+            )}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
 
       {/* 통계 카드 */}
       <div className="grid grid-cols-3 gap-2">
@@ -143,6 +217,7 @@ export default function TabHomecam({ state, dispatch, onToast }) {
                       )}
                     </p>
                     <div className="flex gap-1 mt-1 flex-wrap">
+                      <Badge color="slate">{clip.source === "homecam" ? "🏠 홈캠" : "📱 앱"}</Badge>
                       {clip.flagged && clip.approved === null && <Badge color="amber">확인 필요</Badge>}
                       {clip.approved === true  && <Badge color="green">확인됨</Badge>}
                       {clip.approved === false && <Badge color="slate">제외됨</Badge>}
@@ -283,6 +358,42 @@ export default function TabHomecam({ state, dispatch, onToast }) {
           </div>
         )}
       </div>
+
+      {/* 홈캠 추가 모달 */}
+      <Modal open={showAddCam} onClose={() => { setShowAddCam(false); setNewCamName(""); }} title="홈캠 추가">
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">홈캠의 이름을 입력하세요.</p>
+          <input
+            type="text"
+            value={newCamName}
+            onChange={(e) => setNewCamName(e.target.value)}
+            placeholder="예: 거실 카메라"
+            className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-blue-400"
+          />
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              ※ 실제 홈캠 연동 기능은 추후 업데이트 예정입니다.<br />
+              현재는 카메라를 목록에 등록하는 기능만 제공합니다.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={() => { setShowAddCam(false); setNewCamName(""); }} className="flex-1">취소</Button>
+            <Button
+              variant="dark"
+              className="flex-1"
+              onClick={() => {
+                if (!newCamName.trim()) { onToast("카메라 이름을 입력해주세요."); return; }
+                dispatch({ type: "ADD_CAMERA", cam: { id: `cam_${Date.now()}`, name: newCamName.trim(), status: "offline" } });
+                setShowAddCam(false);
+                setNewCamName("");
+                onToast(`📹 "${newCamName.trim()}" 홈캠이 등록되었습니다.`);
+              }}
+            >
+              등록
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* 삭제 확인 모달 */}
       <Modal

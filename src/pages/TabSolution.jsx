@@ -35,12 +35,20 @@ const DEFAULT_ACTIVITIES = [
   { title: "그림책 읽기 — 함께 보기",        desc: "단순하고 큰 그림의 그림책을 무릎에 앉혀 함께 읽기. 언어 자극과 공동 주시를 동시에 훈련할 수 있습니다.", duration: "10분", icon: "📚", source: "AI 커리큘럼" },
 ];
 
+const SPECIALISTS = [
+  { id: "ped", label: "소아청소년과",   icon: "👶", desc: "발달 평가 및 의학적 소견" },
+  { id: "dev", label: "발달재활 전문가", icon: "🧠", desc: "전반적 발달 지원" },
+  { id: "ot",  label: "작업치료사",     icon: "🤲", desc: "감각·운동 발달" },
+  { id: "st",  label: "언어치료사",     icon: "💬", desc: "언어·의사소통 발달" },
+];
+
 export default function TabSolution({ state, onToast }) {
-  const [done,        setDone]        = useState(new Set());
-  const [expanded,    setExpanded]    = useState(null);
-  const [showSched,   setShowSched]   = useState(false);
-  const [aiLoading,   setAiLoading]   = useState(false);
-  const [aiActivities, setAiActivities] = useState(null);
+  const [done,             setDone]             = useState(new Set());
+  const [expanded,         setExpanded]         = useState(null);
+  const [showSched,        setShowSched]        = useState(false);
+  const [aiLoading,        setAiLoading]        = useState(false);
+  const [aiActivities,     setAiActivities]     = useState(null);
+  const [selectedSpecialist, setSelectedSpecialist] = useState(null);
 
   const clips   = state.todayClips;
   const reports = state.allReports;
@@ -280,42 +288,85 @@ export default function TabSolution({ state, onToast }) {
       </Button>
 
       {/* 상담 예약 */}
-      <Button variant="teal" onClick={() => setShowSched(true)}>
+      <Button variant="teal" onClick={() => { setShowSched(true); setSelectedSpecialist(null); }}>
         📞 발달 상담 예약하기
       </Button>
 
       <Modal open={showSched} onClose={() => setShowSched(false)} title="발달 상담 예약">
-        <div className="space-y-3">
-          <p className="text-sm text-slate-500 mb-1">원하시는 일정을 선택하세요:</p>
-          {slots.map((slot) => (
-            <button
-              key={slot.date}
-              disabled={!slot.ok}
-              onClick={() => {
-                setShowSched(false);
-                onToast(`📅 ${slot.date} ${slot.time} 상담 예약이 완료되었습니다.`);
-              }}
-              className={cn(
-                "w-full p-3 rounded-xl text-left flex justify-between items-center border transition-all",
-                slot.ok
-                  ? "bg-white border-slate-200 hover:border-blue-400 hover:bg-blue-50"
-                  : "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed"
-              )}
-            >
-              <div>
-                <p className={cn("font-bold text-sm", slot.ok ? "text-slate-800" : "text-slate-400")}>
-                  {slot.date}
-                </p>
-                <p className="text-xs text-slate-500 mt-0.5">{slot.time}</p>
+        <div className="space-y-4">
+          {/* 전문가 선택 */}
+          <div>
+            <p className="text-xs font-bold text-slate-600 mb-2">상담 전문가 선택</p>
+            <div className="grid grid-cols-2 gap-2">
+              {SPECIALISTS.map((sp) => (
+                <button
+                  key={sp.id}
+                  onClick={() => setSelectedSpecialist(sp)}
+                  className={cn(
+                    "p-2.5 rounded-xl border text-left transition-all",
+                    selectedSpecialist?.id === sp.id
+                      ? "border-blue-400 bg-blue-50"
+                      : "border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50/50"
+                  )}
+                >
+                  <p className="text-base mb-0.5">{sp.icon}</p>
+                  <p className={cn(
+                    "text-[11px] font-bold leading-tight",
+                    selectedSpecialist?.id === sp.id ? "text-blue-700" : "text-slate-800"
+                  )}>
+                    {sp.label}
+                  </p>
+                  <p className="text-[9px] text-slate-400 mt-0.5 leading-tight">{sp.desc}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 일정 선택 */}
+          {selectedSpecialist && (
+            <div>
+              <p className="text-xs font-bold text-slate-600 mb-2">
+                원하시는 일정을 선택하세요
+              </p>
+              <div className="space-y-2">
+                {slots.map((slot) => (
+                  <button
+                    key={slot.date}
+                    disabled={!slot.ok}
+                    onClick={() => {
+                      setShowSched(false);
+                      onToast(`📅 ${selectedSpecialist.label} 상담 ${slot.date} ${slot.time} 예약이 완료되었습니다.`);
+                    }}
+                    className={cn(
+                      "w-full p-3 rounded-xl text-left flex justify-between items-center border transition-all",
+                      slot.ok
+                        ? "bg-white border-slate-200 hover:border-blue-400 hover:bg-blue-50"
+                        : "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed"
+                    )}
+                  >
+                    <div>
+                      <p className={cn("font-bold text-sm", slot.ok ? "text-slate-800" : "text-slate-400")}>
+                        {slot.date}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-0.5">{slot.time}</p>
+                    </div>
+                    <span className={cn(
+                      "text-[10px] font-bold px-1.5 py-0.5 rounded",
+                      slot.ok ? "bg-green-100 text-green-600" : "bg-slate-100 text-slate-400"
+                    )}>
+                      {slot.ok ? "예약 가능" : "마감"}
+                    </span>
+                  </button>
+                ))}
               </div>
-              <span className={cn(
-                "text-[10px] font-bold px-1.5 py-0.5 rounded",
-                slot.ok ? "bg-green-100 text-green-600" : "bg-slate-100 text-slate-400"
-              )}>
-                {slot.ok ? "예약 가능" : "마감"}
-              </span>
-            </button>
-          ))}
+            </div>
+          )}
+
+          {!selectedSpecialist && (
+            <p className="text-[11px] text-slate-400 text-center">
+              전문가를 선택하면 일정 선택 화면이 나타납니다.
+            </p>
+          )}
         </div>
       </Modal>
     </div>

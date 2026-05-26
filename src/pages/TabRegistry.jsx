@@ -4,15 +4,16 @@ import Button from "../components/Button";
 import Modal from "../components/Modal";
 
 export default function TabRegistry({ state, dispatch, onToast }) {
-  const [selectedReport, setSelectedReport] = useState(null);
-  const [generating,     setGenerating]     = useState(false);
-  const [summaryText,    setSummaryText]     = useState("");
-  const [summaryErr,     setSummaryErr]      = useState("");
-  const [qrVisible,      setQrVisible]       = useState(false);
+  const [selectedReport,  setSelectedReport]  = useState(null);
+  const [generating,      setGenerating]      = useState(false);
+  const [summaryText,     setSummaryText]     = useState("");
+  const [summaryErr,      setSummaryErr]      = useState("");
+  const [qrVisible,       setQrVisible]       = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
-  const [doctorEmail,    setDoctorEmail]     = useState("");
-  const [doctorName,     setDoctorName]      = useState("");
-  const [sending,        setSending]         = useState(false);
+  const [doctorEmail,     setDoctorEmail]     = useState("");
+  const [doctorName,      setDoctorName]      = useState("");
+  const [sending,         setSending]         = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
 
   const reports = state.allReports;
 
@@ -227,9 +228,9 @@ ${reportSummaries}
             <h3 className="font-bold text-slate-800 text-sm">관찰 기록 이력</h3>
           </div>
           {reports.map((r) => (
-            <button
+            <div
               key={r.id}
-              className="w-full text-left p-3 border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors flex items-center gap-3"
+              className="w-full text-left p-3 border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors flex items-center gap-3 cursor-pointer"
               onClick={() => setSelectedReport(selectedReport?.id === r.id ? null : r)}
             >
               <div
@@ -252,10 +253,17 @@ ${reportSummaries}
                   신뢰도 {r.analysis?.confidence ?? "-"}%
                 </p>
               </div>
-              <span className="text-slate-300 text-sm">
+              <span className="text-slate-300 text-sm mr-1">
                 {selectedReport?.id === r.id ? "▲" : "▼"}
               </span>
-            </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(r.id); }}
+                className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-red-100 text-slate-400 hover:text-red-500 transition-colors flex-shrink-0"
+                title="삭제"
+              >
+                🗑
+              </button>
+            </div>
           ))}
         </div>
       )}
@@ -280,6 +288,36 @@ ${reportSummaries}
           </p>
         </div>
       )}
+
+      {/* 관찰 기록 삭제 확인 모달 */}
+      <Modal
+        open={!!deleteConfirmId}
+        onClose={() => setDeleteConfirmId(null)}
+        title="관찰 기록 삭제"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">
+            이 관찰 기록을 삭제하시겠습니까?<br />
+            <span className="text-red-500 font-bold">삭제된 기록은 복구할 수 없습니다.</span>
+          </p>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={() => setDeleteConfirmId(null)}>
+              취소
+            </Button>
+            <button
+              onClick={() => {
+                dispatch({ type: "DELETE_REPORT", reportId: deleteConfirmId });
+                if (selectedReport?.id === deleteConfirmId) setSelectedReport(null);
+                setDeleteConfirmId(null);
+                onToast("🗑 관찰 기록이 삭제되었습니다.");
+              }}
+              className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold text-sm py-2.5 rounded-xl transition-colors"
+            >
+              삭제
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* 의사 검토 요청 모달 */}
       <Modal

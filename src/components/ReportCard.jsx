@@ -38,11 +38,15 @@ export default function ReportCard({ analysis, report, analyzedAt, onRequestRevi
             <p className="text-[10px] text-slate-400">{date}</p>
           </div>
         </div>
-        <div className="text-right">
-          <p className="text-xs text-slate-400">관찰 참고값</p>
-          <p className="font-bold text-lg text-slate-700">
-            {analysis.observationScore}
-          </p>
+        <div>
+          <span className={cn(
+            "text-[10px] font-bold px-2 py-0.5 rounded-full",
+            analysis.attentionNeeded
+              ? "bg-amber-100 text-amber-700"
+              : "bg-green-100 text-green-700"
+          )}>
+            {analysis.attentionNeeded ? "주의 관찰" : "이상 없음"}
+          </span>
         </div>
       </div>
 

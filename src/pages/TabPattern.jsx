@@ -44,6 +44,21 @@ export default function TabPattern({ state, onToast, onSwitchTab }) {
     return { flaggedClips, approvedClips, flagRate, behaviorCount, avgConfidence, severityDist };
   }, [clips]);
 
+  // ── 발달 성장 그래프 (누적 관찰 기록에서) ───────────────────
+  const growthData = useMemo(() => {
+    const reports = state.allReports || [];
+    if (reports.length === 0) return [];
+    const byDate = {};
+    [...reports].reverse().forEach((r) => {
+      const d = new Date(r.createdAt);
+      const key = `${d.getMonth() + 1}/${d.getDate()}`;
+      if (!byDate[key]) byDate[key] = { date: key, total: 0, attention: 0 };
+      byDate[key].total++;
+      if (r.analysis?.attentionNeeded) byDate[key].attention++;
+    });
+    return Object.values(byDate).slice(-14);
+  }, [state.allReports]);
+
   // ── 시간대별 감지 현황 (막대 그래프용) ────────────────────
   const hourlyData = useMemo(() => {
     const hours = Array.from({ length: 24 }, (_, h) => ({ hour: h, total: 0, flagged: 0 }));
@@ -140,6 +155,87 @@ ${clips.slice(0, 5).map((c, i) =>
   return (
     <div className="p-4 space-y-4">
 
+      {/* 발달 성장 그래프 (누적 기록) */}
+      {growthData.length > 0 && (
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <h3 className="text-sm font-bold text-slate-800 mb-1">📈 발달 관찰 추세</h3>
+          <p className="text-[10px] text-slate-400 mb-3">누적 관찰 기록 기준 (최근 {growthData.length}일)</p>
+          <svg
+            viewBox={`0 0 ${Math.max(growthData.length * 28, 200)} 90`}
+            className="w-full"
+            preserveAspectRatio="none"
+          >
+            {(() => {
+              const maxVal = Math.max(...growthData.map((d) => d.total), 1);
+              const barW = 18;
+              const gap  = 10;
+              const chartH = 65;
+              const offsetY = 10;
+              return (
+                <g>
+                  {/* 가이드 라인 */}
+                  {[0, 0.5, 1].map((ratio) => (
+                    <line
+                      key={ratio}
+                      x1="0" y1={offsetY + chartH * (1 - ratio)}
+                      x2={growthData.length * (barW + gap)} y2={offsetY + chartH * (1 - ratio)}
+                      stroke="#e2e8f0" strokeWidth="1"
+                    />
+                  ))}
+                  {growthData.map((d, i) => {
+                    const x     = i * (barW + gap);
+                    const totalH = (d.total / maxVal) * chartH;
+                    const attnH  = (d.attention / maxVal) * chartH;
+                    return (
+                      <g key={d.date}>
+                        {/* 전체 바 */}
+                        <rect
+                          x={x} y={offsetY + chartH - totalH}
+                          width={barW} height={totalH}
+                          rx="3" fill="#bfdbfe"
+                        />
+                        {/* 주의 행동 부분 */}
+                        {d.attention > 0 && (
+                          <rect
+                            x={x} y={offsetY + chartH - attnH}
+                            width={barW} height={attnH}
+                            rx="3" fill="#f87171"
+                          />
+                        )}
+                        {/* 날짜 라벨 */}
+                        <text
+                          x={x + barW / 2} y={offsetY + chartH + 12}
+                          textAnchor="middle" fontSize="7" fill="#94a3b8"
+                        >
+                          {d.date}
+                        </text>
+                        {/* 총 횟수 */}
+                        {d.total > 0 && (
+                          <text
+                            x={x + barW / 2} y={offsetY + chartH - totalH - 3}
+                            textAnchor="middle" fontSize="7" fill="#475569" fontWeight="bold"
+                          >
+                            {d.total}
+                          </text>
+                        )}
+                      </g>
+                    );
+                  })}
+                </g>
+              );
+            })()}
+          </svg>
+          <div className="flex gap-3 mt-1 text-[10px] text-slate-400">
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded bg-blue-200 inline-block" />전체 관찰
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded bg-red-400 inline-block" />주의 행동 감지
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* 오늘의 통계 요약 */}
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
@@ -155,11 +251,11 @@ ${clips.slice(0, 5).map((c, i) =>
           </p>
         </div>
         <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
-          <p className="text-[10px] text-slate-400 uppercase tracking-wide">관찰 참고값</p>
+          <p className="text-[10px] text-slate-400 uppercase tracking-wide">총 관찰 세션</p>
           <p className="text-3xl font-bold mt-1 text-blue-600">
-            {Math.round(stats?.avgConfidence || 0)}%
+            {clips.length}
           </p>
-          <p className="text-[10px] text-slate-400 mt-0.5">오늘 분석 기준</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">오늘 기준</p>
         </div>
       </div>
 
