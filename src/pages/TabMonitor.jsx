@@ -152,7 +152,7 @@ export default function TabMonitor({ state, dispatch, onToast }) {
   }
 
   try {
-    onToast("🤖 AI가 영상을 분석 중입니다...");
+    onToast("🤖 AI가 영상을 확인 중입니다...");
 
     const result = await analyzeFrames({
       frames,
@@ -216,13 +216,13 @@ export default function TabMonitor({ state, dispatch, onToast }) {
     setShowReport(true);
 
     onToast(result.analysis.flagged
-      ? "⚠️ 이상 행동이 감지되었습니다. AI 소견서를 확인하세요."
-      : "✅ 분석 완료. 특이 소견이 없습니다."
+      ? "⚠️ 이상 행동이 감지되었습니다. 관찰 요약을 확인하세요."
+      : "✅ 확인 완료. 이상 행동이 없습니다."
     );
 
   } catch (err) {
-    console.error("분석 오류:", err);
-    onToast(`❌ 분석 실패: ${err.message}`);
+    console.error("관찰 오류:", err);
+    onToast(`❌ 관찰 실패: ${err.message}`);
     setCamMode("preview");   // ← 에러 시에도 반드시 복구
   }
 };
@@ -306,7 +306,7 @@ export default function TabMonitor({ state, dispatch, onToast }) {
             )}
             {camMode === "analyzing" && (
               <span className="text-amber-400 text-xs font-bold animate-pulse">
-                🤖 AI 분석 중...
+                🤖 AI 확인 중...
               </span>
             )}
             {camMode === "preview" && (
@@ -342,7 +342,7 @@ export default function TabMonitor({ state, dispatch, onToast }) {
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
               <span className="text-5xl">📷</span>
               <p className="text-slate-400 text-sm text-center px-4">
-                카메라를 켜면 AI가 실시간으로<br />아이의 행동을 분석합니다
+                카메라를 켜면 AI가 실시간으로<br />아이의 행동을 확인합니다
               </p>
             </div>
           )}
@@ -351,7 +351,7 @@ export default function TabMonitor({ state, dispatch, onToast }) {
           {camMode === "analyzing" && (
             <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-3">
               <div className="text-4xl animate-spin">🤖</div>
-              <p className="text-white text-sm font-bold">AI 분석 중...</p>
+              <p className="text-white text-sm font-bold">AI 확인 중...</p>
               <p className="text-slate-400 text-xs">{capturedFrames.length}개 프레임 처리 중</p>
             </div>
           )}
@@ -408,13 +408,13 @@ export default function TabMonitor({ state, dispatch, onToast }) {
               onClick={stopAndAnalyze}
               className="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-lg text-sm transition-colors active:scale-95"
             >
-              ⏹ 중지 후 AI 분석
+              ⏹ 중지 후 이상 행동 확인
             </button>
           )}
 
           {camMode === "analyzing" && (
             <div className="flex-1 bg-slate-700 text-slate-400 font-bold py-3 rounded-lg text-sm text-center cursor-not-allowed">
-              분석 중...
+              확인 중...
             </div>
           )}
         </div>
@@ -439,7 +439,7 @@ export default function TabMonitor({ state, dispatch, onToast }) {
       {analysis && (
         <div className="space-y-2">
           <div className="flex justify-between items-center px-1">
-            <h3 className="font-bold text-slate-800 text-sm">최근 AI 분석 결과</h3>
+            <h3 className="font-bold text-slate-800 text-sm">최근 AI 관찰 결과</h3>
             <button
               onClick={() => setShowReport(!showReport)}
               className="text-xs text-blue-600 hover:underline"
@@ -498,7 +498,7 @@ export default function TabMonitor({ state, dispatch, onToast }) {
       >
         <div className="space-y-4">
           <p className="text-sm text-slate-600">
-            AI 분석 소견서와 영상 프레임이 담당 의사의 이메일로 전송됩니다.
+            종합 관찰 요약과 영상 프레임이 담당 의사의 이메일로 전송됩니다.
           </p>
 
           <div className="space-y-3">
@@ -529,8 +529,8 @@ export default function TabMonitor({ state, dispatch, onToast }) {
           {/* 전송 내용 미리보기 */}
           <div className="bg-slate-50 p-3 rounded-lg text-xs text-slate-600 space-y-1">
             <p className="font-bold text-slate-700 mb-2">📦 전송될 내용</p>
-            <p>· AI 소견서 (마크다운 → HTML 변환)</p>
-            <p>· 행동 분석 요약 ({analysis?.behaviors?.filter((b) => b.observed).length || 0}개 항목)</p>
+            <p>· 종합 관찰 요약</p>
+            <p>· 행동 관찰 요약 ({analysis?.behaviors?.filter((b) => b.observed).length || 0}개 항목)</p>
             <p>· 영상 프레임 이미지 ({Math.min(capturedFrames.length, 5)}장)</p>
             <p>· 환아 정보: {state.child.name} (D+{state.child.daysOld})</p>
           </div>

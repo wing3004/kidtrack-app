@@ -193,7 +193,6 @@ export default function App() {
               </button>
             </div>
           </div>
-// header 태그 안, 기존 bg-slate-700 div를 아래로 교체
           <div className="bg-slate-700 rounded-lg py-1.5 px-3 text-xs flex items-center gap-2 text-slate-300">
             📝{" "}
             <span>
