@@ -91,6 +91,18 @@ export default function ReportCard({ analysis, report, analyzedAt, onRequestRevi
         </p>
       </div>
 
+      {/* 주의 관찰 항목 설명 */}
+      {analysis.attentionDetails && (
+        <div className="px-4 py-3 bg-amber-50 border-b border-amber-100">
+          <p className="text-xs font-bold text-amber-700 mb-1">
+            ⚠️ 주의 관찰 항목 설명
+          </p>
+          <p className="text-xs text-amber-800 leading-relaxed">
+            {analysis.attentionDetails}
+          </p>
+        </div>
+      )}
+
       {/* 보호자 안내 */}
       {analysis.parentNote && (
         <div className="px-4 py-3 bg-blue-50 border-b border-blue-100">

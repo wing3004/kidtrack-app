@@ -37,8 +37,8 @@ export default function TabHomecam({ state, dispatch, onToast }) {
   const approved = state.todayClips.filter((c) => c.approved === true).length;
   const pending  = state.todayClips.filter((c) => c.approved === null && c.flagged).length;
 
-  const sevColor = { none:"text-slate-400", mild:"text-amber-500", moderate:"text-orange-500", severe:"text-red-600" };
-  const sevLabel = { none:"없음", mild:"경미", moderate:"중등도", severe:"심함" };
+  const freqColor = { none:"text-slate-400", occasional:"text-amber-500", frequent:"text-orange-500" };
+  const freqLabel = { none:"관찰 안됨", occasional:"가끔 관찰", frequent:"자주 관찰" };
 
   return (
     <div className="p-4 space-y-4">
@@ -192,12 +192,20 @@ export default function TabHomecam({ state, dispatch, onToast }) {
                                 .map((b, i) => (
                                   <div key={i} className="flex justify-between items-center">
                                     <span className="text-xs text-slate-700">· {b.name}</span>
-                                    <span className={cn("text-[10px] font-bold", sevColor[b.severity])}>
-                                      {sevLabel[b.severity]}
+                                    <span className={cn("text-[10px] font-bold", freqColor[b.frequency])}>
+                                      {freqLabel[b.frequency]}
                                     </span>
                                   </div>
                                 ))}
                             </div>
+                          </div>
+                        )}
+
+                        {/* 주의 관찰 항목 상세 */}
+                        {clip.analysis.attentionDetails && (
+                          <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg">
+                            <p className="text-[10px] font-bold text-amber-700 mb-1">⚠️ 주의 관찰 항목 설명</p>
+                            <p className="text-xs text-amber-800 leading-relaxed">{clip.analysis.attentionDetails}</p>
                           </div>
                         )}
 
@@ -206,6 +214,33 @@ export default function TabHomecam({ state, dispatch, onToast }) {
                           <div className="bg-blue-50 border border-blue-100 p-3 rounded-lg">
                             <p className="text-[10px] font-bold text-blue-600 mb-1">💡 참고사항</p>
                             <p className="text-xs text-blue-800">{clip.analysis.recommendation}</p>
+                          </div>
+                        )}
+
+                        {/* 관찰 순간 프레임 */}
+                        {clip.keyFrames?.length > 0 && (
+                          <div>
+                            <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">
+                              관찰 순간 프레임
+                            </p>
+                            <div className="flex gap-2 overflow-x-auto pb-1">
+                              {clip.keyFrames.map((src, i) => (
+                                <div key={i} className="flex-shrink-0 text-center">
+                                  <img
+                                    src={src}
+                                    alt={`frame_${i}`}
+                                    className="w-24 rounded-lg border border-slate-200 object-cover"
+                                  />
+                                  <p className="text-[9px] text-slate-400 mt-0.5">
+                                    {i === 0
+                                      ? "이전"
+                                      : i === clip.keyFrames.length - 1
+                                      ? "이후"
+                                      : "감지 순간"}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         )}
 

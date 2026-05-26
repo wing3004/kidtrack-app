@@ -1,0 +1,30 @@
+## Summary
+
+- **소견서(AI 관찰 기록) 생성 실패 수정**: 서버에서 잘못된 Claude 모델 ID(claude-sonnet-4-20250514, claude-opus-4-5)를 사용해 Anthropic API가 오류를 반환하던 문제 -> claude-sonnet-4-6으로 통일
+- **localAnalysisHint 전달 누락 수정**: helpers.js의 analyzeFrames()에서 로컬 모션 분석 힌트(반복 패턴·비대칭 데이터)가 FormData에 포함되지 않던 버그 수정
+- **패턴 분석 탭 오류 수정**: App.jsx에서 TabPattern에 onSwitchTab prop 미전달로 "맞춤 처방 보기" 버튼이 작동하지 않던 문제 수정
+- **행동 필드명 불일치 수정**: TabHomecam.jsx에서 b.severity를 참조하던 것을 API 응답의 실제 필드인 b.frequency로 수정
+- **이상 순간 프레임 표시(신규)**: 관찰 종료 시 모션 피크 위치를 기준으로 이전/감지순간/이후 3장의 썸네일을 자동 캡처해 클립에 저장, 홈캠 탭 상세에서 확인 가능
+- **소견서 내용 강화**: Vision 분석 응답에 attentionDetails 필드 추가, 소견서 프롬프트에 "주의 관찰 항목 상세 설명" 섹션 추가
+
+## Changed Files
+
+| 파일 | 변경 내용 |
+|------|----------|
+| server/index.js | Claude 모델 ID 수정 |
+| server/routes/analyze.js | 모델 ID 2곳 수정, attentionDetails 필드 추가, 소견서 프롬프트 강화 |
+| src/utils/helpers.js | analyzeFrames에 localAnalysisHint 전달 추가 |
+| src/App.jsx | TabPattern에 onSwitchTab prop 추가 |
+| src/pages/TabMonitor.jsx | blobToThumbnail 함수 추가, 키 프레임 캡처 로직 추가 |
+| src/pages/TabHomecam.jsx | frequency 필드명 수정, 키 프레임 표시 UI 추가, attentionDetails 표시 |
+| src/components/ReportCard.jsx | attentionDetails 섹션 표시 추가 |
+
+## Test Plan
+
+- [ ] 카메라로 영상 촬영 후 "관찰 종료 후 기록 분석" -> 소견서가 정상 생성되는지 확인
+- [ ] 홈캠 탭에서 클립 상세 열기 -> 관찰 순간 프레임 3장(이전/감지순간/이후)이 표시되는지 확인
+- [ ] 패턴 분석 탭 -> "관찰 기록 AI 요약 실행" 버튼 동작 확인
+- [ ] 패턴 분석 탭에서 "맞춤 처방 보기 ->" 버튼 클릭 시 맞춤 처방 탭으로 이동하는지 확인
+- [ ] 홈캠 탭 클립 상세에서 행동 빈도(관찰 안됨/가끔 관찰/자주 관찰)가 정상 표시되는지 확인
+
+Generated with Claude Code
