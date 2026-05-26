@@ -11,11 +11,11 @@ export default function TabHomecam({ state, dispatch, onToast }) {
 
   const handleApprove = (clipId) => {
     dispatch({ type: "APPROVE_CLIP", clipId, value: true });
-    onToast("✅ 임상 데이터로 승인되었습니다.");
+    onToast("✅ 관찰 데이터 확인되었습니다.");
   };
   const handleReject = (clipId) => {
     dispatch({ type: "APPROVE_CLIP", clipId, value: false });
-    onToast("❌ AI 오분석으로 제외되었습니다.");
+    onToast("❌ 기록 제외되었습니다.");
   };
   const handleDelete = () => {
     dispatch({ type: "DELETE_CLIP", clipId: deleteTarget.id });
@@ -47,7 +47,7 @@ export default function TabHomecam({ state, dispatch, onToast }) {
       <div className="grid grid-cols-3 gap-2">
         {[
           { label: "총 영상",   value: total,    color: "text-slate-700", bg: "bg-white" },
-          { label: "이상 감지", value: flagged,  color: "text-red-600",   bg: "bg-red-50" },
+          { label: "주의 행동 관찰", value: flagged,  color: "text-red-600",   bg: "bg-red-50" },
           { label: "승인됨",    value: approved, color: "text-green-600", bg: "bg-green-50" },
         ].map((s) => (
           <div key={s.label} className={cn("rounded-xl p-3 text-center border border-slate-200 shadow-sm", s.bg)}>
@@ -62,8 +62,8 @@ export default function TabHomecam({ state, dispatch, onToast }) {
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-2">
           <span className="text-amber-500 text-lg">⚠️</span>
           <div>
-            <p className="text-xs font-bold text-amber-700">검수 필요 영상 {pending}개</p>
-            <p className="text-[10px] text-amber-600">이상 행동이 감지된 영상을 확인해주세요.</p>
+            <p className="text-xs font-bold text-amber-700">확인 필요 영상 {pending}개</p>
+            <p className="text-[10px] text-amber-600">주의 행동이 관찰된 영상을 확인해주세요.</p>
           </div>
         </div>
       )}
@@ -143,8 +143,8 @@ export default function TabHomecam({ state, dispatch, onToast }) {
                       )}
                     </p>
                     <div className="flex gap-1 mt-1 flex-wrap">
-                      {clip.flagged && clip.approved === null && <Badge color="amber">검수 필요</Badge>}
-                      {clip.approved === true  && <Badge color="green">승인됨</Badge>}
+                      {clip.flagged && clip.approved === null && <Badge color="amber">확인 필요</Badge>}
+                      {clip.approved === true  && <Badge color="green">확인됨</Badge>}
                       {clip.approved === false && <Badge color="slate">제외됨</Badge>}
                     </div>
                   </div>
@@ -175,7 +175,7 @@ export default function TabHomecam({ state, dispatch, onToast }) {
                           )}
                         >
                           <p className="font-bold mb-1">
-                            {clip.flagged ? "⚠️ AI 분석 요약" : "✅ AI 분석 요약"}
+                            {clip.flagged ? "⚠️ 관찰 내용 요약" : "✅ 관찰 내용 요약"}
                           </p>
                           <p>{clip.analysis.summary}</p>
                         </div>
@@ -201,10 +201,10 @@ export default function TabHomecam({ state, dispatch, onToast }) {
                           </div>
                         )}
 
-                        {/* 권고사항 */}
+                        {/* 참고사항 */}
                         {clip.analysis.recommendation && (
                           <div className="bg-blue-50 border border-blue-100 p-3 rounded-lg">
-                            <p className="text-[10px] font-bold text-blue-600 mb-1">💡 권고사항</p>
+                            <p className="text-[10px] font-bold text-blue-600 mb-1">💡 참고사항</p>
                             <p className="text-xs text-blue-800">{clip.analysis.recommendation}</p>
                           </div>
                         )}
@@ -217,22 +217,22 @@ export default function TabHomecam({ state, dispatch, onToast }) {
                               onClick={() => handleReject(clip.id)}
                               className="flex-1"
                             >
-                              ❌ 오분석 제외
+                              ❌ 기록 제외
                             </Button>
                             <Button
                               variant="dark"
                               onClick={() => handleApprove(clip.id)}
                               className="flex-1"
                             >
-                              ✓ 임상 승인
+                              ✓ 관찰 데이터 확인
                             </Button>
                           </div>
                         )}
                         {clip.approved !== null && (
                           <p className="text-center text-xs text-slate-400 py-1">
                             {clip.approved
-                              ? "✅ 임상 데이터로 승인됨"
-                              : "❌ 오분석으로 제외됨"}
+                              ? "✅ 관찰 데이터로 승인됨"
+                              : "❌ 기록 제외됨"}
                           </p>
                         )}
                       </div>

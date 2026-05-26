@@ -1,6 +1,5 @@
 node_modules
 dist
 .env
-server/.env
 server/node_modules
-server/uploads
+server/.env

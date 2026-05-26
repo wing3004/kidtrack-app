@@ -193,11 +193,12 @@ export default function App() {
               </button>
             </div>
           </div>
-          <div className="bg-slate-700 rounded-lg py-1.5 px-3 text-xs flex items-center gap-2 text-green-300">
-            🔒{" "}
+// header 태그 안, 기존 bg-slate-700 div를 아래로 교체
+          <div className="bg-slate-700 rounded-lg py-1.5 px-3 text-xs flex items-center gap-2 text-slate-300">
+            📝{" "}
             <span>
-              AI 분석 연동 중{" "}
-              <span className="text-slate-400">(데이터 서버 암호화 전송)</span>
+              관찰 기록 보조 앱{" "}
+              <span className="text-slate-400">· 의료적 진단 도구가 아닙니다</span>
             </span>
           </div>
         </header>

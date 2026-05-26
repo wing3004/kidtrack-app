@@ -6,15 +6,15 @@ import Modal from "../components/Modal";
 // 행동명 → 활동 매핑
 const BEHAVIOR_ACTIVITIES = {
   "상동 행동": [
-    { title: "감각 통합 활동 — 촉감 박스 탐색",      desc: "다양한 질감의 물건(콩, 모래, 솜)을 담은 박스를 탐색하며 감각 자극을 조절하는 연습. 반복적 움직임 대신 손의 탐색으로 에너지를 전환합니다.", duration: "10분", icon: "🖐", source: "의사 권고" },
+    { title: "감각 통합 활동 — 촉감 박스 탐색",      desc: "다양한 질감의 물건(콩, 모래, 솜)을 담은 박스를 탐색하며 감각 자극을 조절하는 연습. 반복적 움직임 대신 손의 탐색으로 에너지를 전환합니다.", duration: "10분", icon: "🖐", source: "전문가 권장" },
     { title: "대근육 활동 — 트램폴린 또는 쿠션 점프", desc: "몸 튕기기 상동 행동을 안전한 환경에서 충족시켜주는 대체 활동. 일정한 리듬으로 점프하며 전정 감각을 자극합니다.", duration: "15분", icon: "🦘", source: "AI 커리큘럼" },
   ],
   "호명 반응": [
-    { title: "이름 부르기 놀이 — 호명 반응 강화",     desc: "아이 이름을 부른 후 2초 대기 → 반응 시 즉각적인 긍정 강화(칭찬, 좋아하는 간식). 하루 10회 반복, 점진적으로 거리를 늘려가세요.", duration: "10분", icon: "📣", source: "의사 권고" },
+    { title: "이름 부르기 놀이 — 호명 반응 강화",     desc: "아이 이름을 부른 후 2초 대기 → 반응 시 즉각적인 긍정 강화(칭찬, 좋아하는 간식). 하루 10회 반복, 점진적으로 거리를 늘려가세요.", duration: "10분", icon: "📣", source: "전문가 권장" },
     { title: "숨바꼭질 변형 놀이 — 이름 반응 게임",   desc: "보호자가 숨은 후 이름을 부르면 찾아오는 게임. 호명 반응과 사회적 참여를 동시에 훈련합니다.", duration: "10분", icon: "🙈", source: "AI 커리큘럼" },
   ],
   "눈 맞춤": [
-    { title: "눈맞춤 강화 놀이 — 거품 불기",          desc: "비누 거품을 아이 눈높이에서 불어주며 자연스러운 눈 맞춤을 유도. 시선이 맞으면 즉시 칭찬합니다.", duration: "10분", icon: "🫧", source: "의사 권고" },
+    { title: "눈맞춤 강화 놀이 — 거품 불기",          desc: "비누 거품을 아이 눈높이에서 불어주며 자연스러운 눈 맞춤을 유도. 시선이 맞으면 즉시 칭찬합니다.", duration: "10분", icon: "🫧", source: "전문가 권장" },
     { title: "손인형 놀이 — 공동 주시 훈련",           desc: "손인형으로 이야기를 만들며 아이의 시선이 인형과 보호자 얼굴을 번갈아 보도록 유도. 공동 주시 발달을 자극합니다.", duration: "10분", icon: "🧸", source: "AI 커리큘럼" },
   ],
   "반복적 물건 배열": [
@@ -24,7 +24,7 @@ const BEHAVIOR_ACTIVITIES = {
     { title: "전신 압박 활동 — 이불 말이",             desc: "이불로 아이를 부드럽게 감싸주는 고유감각 자극 활동. 과잉 활성화된 신경계를 진정시키는 데 효과적입니다.", duration: "5분", icon: "🛏", source: "AI 커리큘럼" },
   ],
   "자해 행동": [
-    { title: "즉시 보호자에게 연락하세요",              desc: "자해 행동이 관찰된 경우 즉시 전문의와 상담하세요. 집에서 할 수 있는 것: 위험 물건 제거, 아이를 안전하고 조용한 환경으로 이동.", duration: "즉시", icon: "🚨", source: "의사 권고" },
+    { title: "즉시 보호자에게 연락하세요",              desc: "자해 행동이 관찰된 경우 즉시 전문의와 상담하세요. 집에서 할 수 있는 것: 위험 물건 제거, 아이를 안전하고 조용한 환경으로 이동.", duration: "즉시", icon: "🚨", source: "전문가 권장" },
   ],
 };
 
@@ -72,7 +72,7 @@ export default function TabSolution({ state, onToast }) {
   // AI로 맞춤 활동 추가 생성
   const generateAIActivities = async () => {
     if (clips.length === 0) {
-      onToast("⚠️ 분석된 영상이 없습니다. 모니터링 탭에서 먼저 촬영해주세요.");
+      onToast("⚠️ 관찰된 영상이 없습니다. 모니터링 탭에서 먼저 촬영해주세요.");
       return;
     }
     setAiLoading(true);
@@ -84,22 +84,27 @@ export default function TabSolution({ state, onToast }) {
         })
       );
 
-      const prompt = `당신은 소아 작업치료사 AI입니다.
-아래 아이(생후 ${Math.floor(state.child.daysOld / 30)}개월)의 실제 관찰 데이터를 기반으로 집에서 할 수 있는 맞춤 활동 3가지를 추천하세요.
+      const prompt = `당신은 영유아 발달을 지원하는 육아 정보 안내 AI입니다.
+반드시 한국어로만 답변하세요.
+의료적 처방이나 치료 행위가 아닌, 일반적인 육아 놀이 활동을 안내합니다.
 
-관찰된 행동: ${observedBehaviors.join(", ") || "특이 행동 없음"}
-분석 요약: ${clips[0]?.analysis?.summary || "없음"}
+아래 관찰 기록을 참고하여 가정에서 할 수 있는 참고 활동 3가지를 안내하세요.
 
-아래 JSON 형식으로만 응답하세요. 다른 텍스트는 없어야 합니다:
+관찰된 행동: ${observedBehaviors.join(", ") || "특이 행동 관찰 없음"}
+관찰 요약: ${clips[0]?.analysis?.observationSummary || clips[0]?.analysis?.summary || "없음"}
+
+아래 JSON 형식으로만 응답하세요:
 [
   {
     "title": "활동 제목 (10자 이내)",
-    "desc": "활동 설명 (2~3문장, 구체적인 방법 포함)",
+    "desc": "활동 방법 설명 (2~3문장, 구체적인 놀이 방법)",
     "duration": "XX분",
     "icon": "이모지 1개",
-    "source": "AI 커리큘럼"
+    "source": "참고 활동"
   }
-]`;
+]
+
+⚠️ 절대 금지: 치료, 처방, 진단, 증상, 병명 등 의료 용어 사용 금지`;
 
       const result = await callAI(prompt);
       const cleaned = result.replace(/```json|```/g, "").trim();
@@ -132,20 +137,20 @@ export default function TabSolution({ state, onToast }) {
       {/* 헤더 */}
       <div className="text-center mt-1">
         <span className="bg-slate-700 text-white text-[10px] font-bold px-3 py-1 rounded-full tracking-wider">
-          {hasData ? "실제 분석 기반" : "기본 커리큘럼"}
+          {hasData ? "관찰 기록 기반" : "기본 커리큘럼"}
         </span>
         <h2 className="font-bold text-slate-800 text-lg mt-2">
-          {state.child.name ? `${state.child.name}을(를) 위한` : ""} 맞춤 처방
+          {state.child.name ? `${state.child.name}을(를) 위한` : ""} 참고 활동 안내
         </h2>
         {hasData ? (
           <p className="text-xs text-slate-500 mt-1 px-4 leading-relaxed">
-            오늘 분석된 {clips.length}개 영상 데이터를 기반으로<br />
+            오늘 관찰된 {clips.length}개 영상 데이터를 기반으로<br />
             맞춤 활동이 구성되었습니다.
           </p>
         ) : (
           <p className="text-xs text-slate-500 mt-1 px-4 leading-relaxed">
-            모니터링에서 영상을 분석하면<br />
-            더 정확한 맞춤 처방이 제공됩니다.
+            모니터링에서 영상을 요약하면<br />
+            더 정확한 참고 활동 안내가 제공됩니다.
           </p>
         )}
       </div>
@@ -176,7 +181,7 @@ export default function TabSolution({ state, onToast }) {
         return (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
             <p className="text-xs font-bold text-amber-700 mb-1">
-              📋 오늘 관찰된 행동 기반 처방
+              📋 오늘 관찰된 행동 기반 참고 활동
             </p>
             <p className="text-[10px] text-amber-600">
               {[...behaviors].join(" · ")}
@@ -215,11 +220,11 @@ export default function TabSolution({ state, onToast }) {
                   <span className="text-[10px] text-slate-400">⏱ {act.duration}</span>
                   <span className={cn(
                     "text-[10px] font-bold px-1.5 py-0.5 rounded",
-                    act.source === "의사 권고"
-                      ? "bg-blue-100 text-blue-600"
+                    act.source === "전문가 권장"
+                      ? "bg-green-100 text-green-600"
                       : "bg-slate-100 text-slate-500"
                   )}>
-                    {act.source === "의사 권고" ? "👨‍⚕️ 의사 권고" : "🤖 AI 추천"}
+                    {act.source === "전문가 권장" ? "👨‍⚕️ 전문가 권장" : "🤖 AI 추천"}
                   </span>
                 </div>
               </div>

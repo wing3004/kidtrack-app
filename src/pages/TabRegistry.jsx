@@ -16,10 +16,10 @@ export default function TabRegistry({ state, dispatch, onToast }) {
 
   const reports = state.allReports;
 
-  // AI 소견서 종합 요약 생성
+  // 관찰 기록 요약문 종합 요약 생성
   const generateSummary = async () => {
     if (reports.length === 0) {
-      onToast("⚠️ 생성된 소견서가 없습니다.");
+      onToast("⚠️ 생성된 관찰 기록 요약이 없습니다.");
       return;
     }
     setGenerating(true);
@@ -29,40 +29,44 @@ export default function TabRegistry({ state, dispatch, onToast }) {
       const reportSummaries = reports
         .slice(0, 10)
         .map((r, i) =>
-          `[${i + 1}번 소견 / ${new Date(r.createdAt).toLocaleDateString("ko-KR")}]\n` +
+          `[${i + 1}번 기록 / ${new Date(r.createdAt).toLocaleDateString("ko-KR")}]\n` +
           `이상 감지: ${r.analysis?.flagged ? "예" : "아니오"} / ` +
           `신뢰도: ${r.analysis?.confidence ?? "-"}% / ` +
           `요약: ${r.analysis?.summary || "없음"}`
         )
         .join("\n\n");
 
-      const prompt = `당신은 소아 신경발달 전문 AI입니다.
-아래는 ${state.child.name}(생후 ${Math.floor(state.child.daysOld / 30)}개월)의 누적 AI 소견 데이터입니다.
+      const prompt = `당신은 보호자의 육아 관찰 기록을 정리하는 AI 보조 도구입니다.
+반드시 한국어로만 작성하세요.
+
+아래는 ${state.child.name}(생후 ${Math.floor(state.child.daysOld / 30)}개월)의
+누적 관찰 기록입니다.
 
 ${reportSummaries}
 
-위 누적 데이터를 종합하여 담당 의사에게 제출할 요약 소견서를 한국어로 작성하세요.
+위 기록을 종합하여 전문가 상담 시 제출할 관찰 기록 요약문을 작성하세요.
 
-# 종합 AI 임상 소견서
+# 육아 관찰 기록 종합 요약
 
-**환아**: ${state.child.name} (생후 ${Math.floor(state.child.daysOld / 30)}개월)
-**분석 기간**: ${reports.length}개 소견 누적
 **작성일**: ${new Date().toLocaleDateString("ko-KR")}
+**관찰 대상**: ${state.child.name} (생후 ${Math.floor(state.child.daysOld / 30)}개월)
+**관찰 기록 수**: ${reports.length}건
 
-## 1. 전체 관찰 요약
-(2~3문장)
+## 1. 전체 관찰 기간 요약
+(관찰된 내용을 사실 그대로 2~3문장)
 
-## 2. 주요 반복 관찰 행동
-(실제 데이터 기반, bullet point)
+## 2. 반복적으로 관찰된 행동
+(사실 기반 나열, 진단 표현 없이)
 
-## 3. 종합 임상 소견
-(3~4문장)
+## 3. 전문가 상담 시 참고사항
+(보호자가 상담 시 이 기록을 어떻게 활용할지 안내, 2~3가지)
 
-## 4. 의사 권고 사항
-(2~3가지)
+## ※ 안내사항
+본 문서는 보호자가 작성한 관찰 기록을 AI가 정리한 참고 자료입니다.
+의료적 진단이나 전문가의 소견을 대체하지 않으며,
+반드시 소아과 또는 발달 전문가의 상담을 통해 정확한 평가를 받으시기 바랍니다.
 
-## 5. 주의사항
-이 소견서는 AI 보조 분석 도구에 의해 생성되었으며, 전문 의료진의 진단을 대체하지 않습니다.`;
+⚠️ 절대 금지: 질병명, 장애명, 의료 용어, 확정적 판단 표현 사용 금지`;
 
       const result = await callAI(prompt);
       setSummaryText(result);
@@ -75,7 +79,7 @@ ${reportSummaries}
   // 의사에게 이메일 전송
   const handleSendReview = async () => {
     if (!doctorEmail) { onToast("의사 이메일을 입력해주세요."); return; }
-    if (!summaryText)  { onToast("먼저 AI 소견서 요약을 생성해주세요."); return; }
+    if (!summaryText)  { onToast("먼저 AI 관찰 기록 요약을 생성해주세요."); return; }
     setSending(true);
     try {
       const { sendDoctorReview } = await import("../utils/helpers");
@@ -88,20 +92,20 @@ ${reportSummaries}
         childDaysOld:  state.child.daysOld,
         report:        summaryText,
         analysis:      { ...latestAnalysis, summary: summaryText.slice(0, 200) },
-        frames:        [], // 소견서 탭에서는 프레임 없이 텍스트만
+        frames:        [], // 관찰 기록 탭에서는 프레임 없이 텍스트만
       });
       // 전송 완료 표시
       dispatch({
         type: "ADD_NOTIFICATION",
         notification: {
           id:   "n_review_" + Date.now(),
-          text: `${doctorName || "담당 의사"} 선생님께 소견서를 전송했습니다.`,
+          text: `${doctorName || "담당 의사"} 선생님께 관찰 기록을 전송했습니다.`,
           time: "방금",
           read: false,
         },
       });
       setShowReviewModal(false);
-      onToast("📨 담당 의사에게 소견서가 전송되었습니다.");
+      onToast("📨 담당 의사에게 관찰 기록이 전송되었습니다.");
     } catch (e) {
       onToast("❌ 전송 실패: " + e.message);
     }
@@ -115,9 +119,9 @@ ${reportSummaries}
       <div className="bg-slate-800 text-white p-4 rounded-xl shadow-lg">
         <div className="flex justify-between items-start mb-3">
           <div>
-            <h2 className="font-bold text-base">AI 소견서 보관함</h2>
+            <h2 className="font-bold text-base">AI 관찰 기록 보관함</h2>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              모니터링에서 생성된 소견서 {reports.length}건
+              모니터링에서 생성된 관찰 기록 {reports.length}건
             </p>
           </div>
           <span className="text-green-400 text-xl">🛡️</span>
@@ -126,7 +130,7 @@ ${reportSummaries}
         <div className="grid grid-cols-2 gap-2 mb-4">
           <div className="bg-slate-700 rounded-lg p-2.5 text-center">
             <p className="text-xl font-bold text-white">{reports.length}</p>
-            <p className="text-[10px] text-slate-400">누적 소견서</p>
+            <p className="text-[10px] text-slate-400">누적 관찰 기록</p>
           </div>
           <div className="bg-slate-700 rounded-lg p-2.5 text-center">
             <p className="text-xl font-bold text-red-400">
@@ -138,7 +142,7 @@ ${reportSummaries}
 
         <div className="space-y-2">
           <Button variant="primary" onClick={generateSummary} disabled={generating}>
-            {generating ? "⏳ 요약 생성 중..." : "📄 AI 종합 소견서 요약 생성"}
+            {generating ? "⏳ 요약 생성 중..." : "📄 종합 관찰 기록 요약 생성"}
           </Button>
           <button
             onClick={() => { setQrVisible(!qrVisible); onToast("🔗 QR 코드가 생성되었습니다."); }}
@@ -186,7 +190,7 @@ ${reportSummaries}
           ) : (
             <>
               <div className="flex justify-between items-center mb-3">
-                <h3 className="font-bold text-slate-800 text-sm">📋 AI 종합 소견서</h3>
+                <h3 className="font-bold text-slate-800 text-sm">📋 AI 종합 관찰 기록</h3>
                 <div className="flex gap-2">
                   <button
                     onClick={() => { navigator.clipboard?.writeText(summaryText); onToast("📋 복사되었습니다."); }}
@@ -216,11 +220,11 @@ ${reportSummaries}
         </div>
       )}
 
-      {/* 소견서 목록 */}
+      {/* 관찰 기록 목록 */}
       {reports.length > 0 && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="p-3 border-b border-slate-100">
-            <h3 className="font-bold text-slate-800 text-sm">소견서 이력</h3>
+            <h3 className="font-bold text-slate-800 text-sm">관찰 기록 이력</h3>
           </div>
           {reports.map((r) => (
             <button
@@ -244,7 +248,7 @@ ${reportSummaries}
                   })}
                 </p>
                 <p className="text-[10px] text-slate-400 mt-0.5 truncate">
-                  {r.analysis?.flagged ? "이상 행동 감지" : "특이 소견 없음"} ·
+                  {r.analysis?.flagged ? "이상 행동 감지" : "특이 행동 관찰 없음"} ·
                   신뢰도 {r.analysis?.confidence ?? "-"}%
                 </p>
               </div>
@@ -256,12 +260,12 @@ ${reportSummaries}
         </div>
       )}
 
-      {/* 선택된 소견서 상세 */}
+      {/* 선택된 관찰 기록 상세 */}
       {selectedReport && (
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
-          <h3 className="font-bold text-slate-800 text-sm">소견서 상세</h3>
+          <h3 className="font-bold text-slate-800 text-sm">관찰 기록 상세</h3>
           <div className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap bg-slate-50 p-3 rounded-lg max-h-60 overflow-y-auto no-scroll">
-            {selectedReport.reportText || "소견서 본문이 없습니다."}
+            {selectedReport.reportText || "관찰 기록 본문이 없습니다."}
           </div>
         </div>
       )}
@@ -270,7 +274,7 @@ ${reportSummaries}
       {reports.length === 0 && !generating && !summaryText && (
         <div className="py-10 text-center">
           <p className="text-4xl mb-3">📋</p>
-          <p className="text-sm text-slate-500 font-semibold">아직 소견서가 없습니다</p>
+          <p className="text-sm text-slate-500 font-semibold">아직 관찰 기록이 없습니다</p>
           <p className="text-xs text-slate-400 mt-1">
             모니터링 탭에서 영상을 촬영하고 분석하면<br />여기에 자동으로 저장됩니다.
           </p>
@@ -285,7 +289,7 @@ ${reportSummaries}
       >
         <div className="space-y-4">
           <p className="text-sm text-slate-600">
-            AI 종합 소견서가 담당 의사의 이메일로 전송됩니다.
+            AI 종합 관찰 기록이 담당 의사의 이메일로 전송됩니다.
           </p>
           <div className="space-y-3">
             <div>
@@ -316,7 +320,7 @@ ${reportSummaries}
             onClick={handleSendReview}
             disabled={sending || !doctorEmail}
           >
-            {sending ? "⏳ 전송 중..." : "📨 소견서 전송"}
+            {sending ? "⏳ 전송 중..." : "📨 관찰 기록 전송"}
           </Button>
         </div>
       </Modal>
