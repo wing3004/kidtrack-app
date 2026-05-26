@@ -211,7 +211,7 @@ export default function App() {
             <TabHomecam state={state} dispatch={dispatch} onToast={onToast} />
           )}
           {activeTab === 2 && (
-            <TabPattern state={state} dispatch={dispatch} onToast={onToast} />
+            <TabPattern state={state} dispatch={dispatch} onToast={onToast} onSwitchTab={setActiveTab} />
           )}
           {activeTab === 3 && (
             <TabRegistry state={state} dispatch={dispatch} onToast={onToast} />

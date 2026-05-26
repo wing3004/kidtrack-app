@@ -17,11 +17,12 @@ export async function callAI(prompt) {
 }
 
 // 영상 프레임 분석 (Vision)
-export async function analyzeFrames({ frames, childId, clipId }) {
+export async function analyzeFrames({ frames, childId, clipId, localAnalysisHint }) {
   const fd = new FormData();
   frames.forEach((blob, i) => fd.append("frames", blob, `frame_${i}.jpg`));
   fd.append("childId", childId);
   fd.append("clipId",  clipId);
+  if (localAnalysisHint) fd.append("localAnalysisHint", localAnalysisHint);
 
   const res = await fetch(`${BASE}/api/analyze/frames`, {
     method: "POST",

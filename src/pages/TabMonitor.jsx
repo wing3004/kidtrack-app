@@ -21,6 +21,25 @@ function getFrameImageData(videoEl, canvas) {
   return ctx.getImageData(0, 0, canvas.width, canvas.height);
 }
 
+// ── Blob → 썸네일 data URL 변환 ─────────────────────────────
+function blobToThumbnail(blob, maxW = 200) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(blob);
+    img.onload = () => {
+      const scale = maxW / img.width;
+      const canvas = document.createElement("canvas");
+      canvas.width = maxW;
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL("image/jpeg", 0.65));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+    img.src = url;
+  });
+}
+
 // ── AI 전송용 JPEG Blob 캡처 ────────────────────────────────
 function captureJpegBlob(videoEl, canvas) {
   return new Promise((resolve) => {
@@ -274,7 +293,27 @@ export default function TabMonitor({ state, dispatch, onToast }) {
       setAnalyzedAt(result.analyzedAt);
       setCapturedFrames(session.frames);
 
-      // 4. 클립 저장
+      // 4. 이상 감지 시 키 프레임 썸네일 생성 (이전/감지순간/이후)
+      const keyFrames = [];
+      if (session.frames.length > 0) {
+        const motionH = session.motionHistory;
+        const peakMotionIdx = motionH.indexOf(Math.max(...motionH, 0));
+        const peakFrameIdx  = Math.min(
+          Math.floor(peakMotionIdx / 4),
+          session.frames.length - 1
+        );
+        const frameIndices = [...new Set([
+          0,
+          peakFrameIdx,
+          session.frames.length - 1,
+        ])];
+        const thumbs = await Promise.all(
+          frameIndices.map((i) => blobToThumbnail(session.frames[i]))
+        );
+        keyFrames.push(...thumbs.filter(Boolean));
+      }
+
+      // 5. 클립 저장
       dispatch({
         type: "ADD_CLIP",
         clip: {
@@ -289,10 +328,11 @@ export default function TabMonitor({ state, dispatch, onToast }) {
           flagged:  mergedAnalysis.attentionNeeded,
           approved: null,
           analysis: mergedAnalysis,
+          keyFrames,
         },
       });
 
-      // 5. 관찰 기록 요약문 생성
+      // 6. 관찰 기록 요약문 생성
       const { report: reportText } = await generateReport({
         childName:    state.child.name,
         childDaysOld: state.child.daysOld,

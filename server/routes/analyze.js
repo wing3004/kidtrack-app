@@ -74,7 +74,7 @@ router.post("/frames", upload.array("frames", 30), async (req, res) => {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model:      "claude-opus-4-5",
+        model:      "claude-sonnet-4-6",
         max_tokens: 2000,
         messages: [{
           role:    "user",
@@ -103,6 +103,7 @@ ${hintText}
     }
   ],
   "observationSummary": "관찰된 내용을 사실 그대로 2~3문장으로 기술 (한국어)",
+  "attentionDetails": "attentionNeeded가 true인 경우, 어떤 행동이 관찰되었고 왜 보호자가 주의 깊게 살펴야 하는지 구체적으로 2~3문장 기술. attentionNeeded가 false이면 null",
   "parentNote": "보호자가 전문가 상담 시 이 기록을 참고하도록 안내하는 1~2문장 (한국어)",
   "consultRecommended": true/false
 }
@@ -219,7 +220,11 @@ ${analysis?.parentNote || ""}
 ## 3. 관찰 내용 요약
 (사실 기반 서술, 2~3문장. "~이 관찰되었습니다" 형태로만 작성)
 
-## 4. 전문가 상담 시 참고사항
+## 4. 주의 관찰 항목 상세 설명
+(주의 행동이 관찰된 경우, 어떤 행동이 어떤 방식으로 관찰되었고 왜 보호자가 주의 깊게 살펴봐야 하는지 구체적으로 기술.
+관찰된 행동이 없으면 "관찰 기간 중 특이 행동이 관찰되지 않았습니다."로 작성)
+
+## 5. 전문가 상담 시 참고사항
 (보호자가 상담 시 이 기록을 어떻게 활용할지 안내. 2~3가지)
 
 ## ※ 안내사항
@@ -235,7 +240,7 @@ ${analysis?.parentNote || ""}
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model:      "claude-sonnet-4-20250514",
+        model:      "claude-sonnet-4-6",
         max_tokens: 1500,
         messages:   [{ role: "user", content: prompt }],
       }),
