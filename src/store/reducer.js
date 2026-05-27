@@ -47,6 +47,12 @@ export function reducer(state, action) {
         allReports: state.allReports.filter((r) => r.id !== action.reportId),
       };
 
+    case "ADD_DOCTOR_ACTIVITY":
+      return {
+        ...state,
+        doctorActivities: [...state.doctorActivities, action.activity],
+      };
+
     // 의사 권고 업데이트
     case "SET_DOCTOR_NOTE":
       return { ...state, doctorNote: action.payload };

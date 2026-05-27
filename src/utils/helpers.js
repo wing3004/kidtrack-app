@@ -46,6 +46,24 @@ export async function generateReport({ childName, childDaysOld, analysis, clipCo
   return res.json();
 }
 
+// 활동 수행 영상 분석 (피드백)
+export async function analyzeActivity({ frames, activityTitle, activityDesc }) {
+  const fd = new FormData();
+  frames.forEach((blob, i) => fd.append("frames", blob, `frame_${i}.jpg`));
+  fd.append("activityTitle", activityTitle || "활동");
+  fd.append("activityDesc",  activityDesc  || "");
+
+  const res = await fetch(`${BASE}/api/analyze/activity`, {
+    method: "POST",
+    body:   fd,
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || "활동 분석 실패");
+  }
+  return res.json();
+}
+
 // 의사에게 이메일 전송
 export async function sendDoctorReview({ doctorEmail, doctorName, childName, childDaysOld, report, analysis, frames }) {
   const fd = new FormData();

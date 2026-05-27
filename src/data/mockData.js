@@ -9,6 +9,7 @@ export const INITIAL_STATE = {
   cameras: [],           // 카메라는 기기 연결 시 추가
   todayClips: [],        // 오늘 촬영된 클립 (분석 결과 포함)
   allReports: [],        // 누적 AI 소견서 목록
+  doctorActivities: [], // 전문가 추천 활동 목록
   doctorNote: {
     text:    "",
     keyword: "",

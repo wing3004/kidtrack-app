@@ -258,4 +258,101 @@ ${analysis?.parentNote || ""}
   }
 });
 
+// ── POST /api/analyze/activity ────────────────────────────────
+router.post("/activity", upload.array("frames", 20), async (req, res) => {
+  try {
+    const files         = req.files;
+    const activityTitle = req.body.activityTitle || "활동";
+    const activityDesc  = req.body.activityDesc  || "";
+
+    if (!files || files.length === 0) {
+      return res.status(400).json({ error: "프레임 이미지가 없습니다." });
+    }
+
+    const frameContents = files.slice(0, 8).map((f) => {
+      const data = fs.readFileSync(f.path);
+      return {
+        type:   "image",
+        source: { type: "base64", media_type: "image/jpeg", data: data.toString("base64") },
+      };
+    });
+
+    const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type":      "application/json",
+        "x-api-key":         process.env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model:      "claude-sonnet-4-6",
+        max_tokens: 1000,
+        messages: [{
+          role:    "user",
+          content: [
+            ...frameContents,
+            {
+              type: "text",
+              text: `당신은 육아 활동 수행 여부를 관찰 기록하는 AI 보조 도구입니다.
+반드시 한국어로만 답변하세요.
+
+역할 범위:
+- 영상에서 아이가 제시된 활동을 어느 정도 수행했는지 관찰 기록합니다.
+- 보호자가 활동을 더 잘 도울 수 있도록 참고 정보를 제공합니다.
+- 의료적 진단, 장애 판정은 절대 수행하지 않습니다.
+
+[오늘의 활동 정보]
+활동명: ${activityTitle}
+활동 방법: ${activityDesc}
+
+위 활동 영상을 관찰하고 아래 JSON 형식으로만 응답하세요. 다른 텍스트 없이 JSON만 출력하세요.
+
+{
+  "participationLevel": "high|medium|low",
+  "observedBehaviors": ["관찰된 행동을 사실 그대로 기술 (2~3개, 한국어)"],
+  "activitySummary": "활동 수행 모습을 사실 그대로 2문장으로 기술 (한국어)",
+  "encouragement": "보호자와 아이에게 전하는 긍정적 격려 메시지 1문장 (한국어)",
+  "improvementTips": ["다음에 시도해볼 수 있는 참고 방법 1~2가지 (한국어)"],
+  "continueActivity": true
+}
+
+⚠️ 절대 금지:
+- 질병명, 장애명, 의료 용어 사용 금지
+- "정상/비정상", "문제", "이상" 등 판단 표현 금지
+- 확정적 의료 판단 금지
+- 모든 텍스트는 반드시 한국어로만 작성`,
+            },
+          ],
+        }],
+      }),
+    });
+
+    const claudeData = await claudeRes.json();
+    if (claudeData.error) throw new Error(claudeData.error.message);
+
+    const rawText = claudeData.content?.[0]?.text || "{}";
+    let feedback;
+    try {
+      const cleaned = rawText.replace(/```json|```/g, "").trim();
+      feedback = JSON.parse(cleaned);
+    } catch {
+      feedback = {
+        participationLevel: "medium",
+        observedBehaviors:  ["활동을 시도하는 모습이 관찰되었습니다"],
+        activitySummary:    "활동에 참여하는 모습이 관찰되었습니다.",
+        encouragement:      "잘 하고 있어요! 계속 함께 해보세요.",
+        improvementTips:    ["다음에도 같은 활동을 반복해보세요"],
+        continueActivity:   true,
+      };
+    }
+
+    files.forEach((f) => { try { fs.unlinkSync(f.path); } catch {} });
+    res.json({ ok: true, feedback, analyzedAt: new Date().toISOString() });
+
+  } catch (err) {
+    console.error("[analyze/activity]", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { cn, callAI } from "../utils/helpers";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { cn, callAI, analyzeActivity } from "../utils/helpers";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
 
@@ -42,7 +42,19 @@ const SPECIALISTS = [
   { id: "st",  label: "언어치료사",     icon: "💬", desc: "언어·의사소통 발달" },
 ];
 
-export default function TabSolution({ state, onToast }) {
+const PARTICIPATION_LABEL = {
+  high:   "적극적으로 참여했어요",
+  medium: "함께 참여했어요",
+  low:    "조금씩 시도해봐요",
+};
+const PARTICIPATION_STYLE = {
+  high:   "bg-green-100 text-green-700",
+  medium: "bg-blue-100 text-blue-700",
+  low:    "bg-amber-100 text-amber-700",
+};
+const PARTICIPATION_ICON = { high: "🌟", medium: "👍", low: "💪" };
+
+export default function TabSolution({ state, dispatch, onToast }) {
   const [done,             setDone]             = useState(new Set());
   const [expanded,         setExpanded]         = useState(null);
   const [showSched,        setShowSched]        = useState(false);
@@ -50,22 +62,130 @@ export default function TabSolution({ state, onToast }) {
   const [aiActivities,     setAiActivities]     = useState(null);
   const [selectedSpecialist, setSelectedSpecialist] = useState(null);
 
+  // 전문가 활동 추가 모달
+  const [showAddDoctor,  setShowAddDoctor]  = useState(false);
+  const [newActTitle,    setNewActTitle]    = useState("");
+  const [newActDesc,     setNewActDesc]     = useState("");
+  const [newActDuration, setNewActDuration] = useState("10분");
+
+  // 활동 촬영 관련
+  const [recordingAct,  setRecordingAct]  = useState(null); // { act, key, index? }
+  const [actCamMode,    setActCamMode]    = useState("idle"); // idle|preview|recording|analyzing
+  const [actCamStream,  setActCamStream]  = useState(null);
+  const [actRecordSec,  setActRecordSec]  = useState(0);
+  const [actFeedbacks,  setActFeedbacks]  = useState({});    // key → feedback
+  const [showFeedback,  setShowFeedback]  = useState(null);  // { feedback, actTitle }
+
+  const actVideoRef   = useRef(null);
+  const actCanvasRef  = useRef(null);
+  const actTimerRef   = useRef(null);
+  const actCaptureRef = useRef(null);
+  const actSessionRef = useRef({ frames: [] });
+
+  // 언마운트 시 카메라 정리
+  useEffect(() => () => {
+    clearInterval(actTimerRef.current);
+    clearInterval(actCaptureRef.current);
+    if (actCamStream) actCamStream.getTracks().forEach((t) => t.stop());
+  }, []);
+
+  const startActCamera = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+      setActCamStream(stream);
+      setActCamMode("preview");
+      if (actVideoRef.current) {
+        actVideoRef.current.srcObject = stream;
+        await actVideoRef.current.play().catch(() => {});
+      }
+      if (!actCanvasRef.current) actCanvasRef.current = document.createElement("canvas");
+    } catch {
+      onToast("⚠️ 카메라를 시작할 수 없습니다.");
+    }
+  }, [onToast]);
+
+  const stopActCamera = useCallback(() => {
+    clearInterval(actTimerRef.current);
+    clearInterval(actCaptureRef.current);
+    if (actCamStream) actCamStream.getTracks().forEach((t) => t.stop());
+    if (actVideoRef.current) actVideoRef.current.srcObject = null;
+    setActCamStream(null);
+    setActCamMode("idle");
+  }, [actCamStream]);
+
+  const startActRecording = () => {
+    actSessionRef.current = { frames: [] };
+    setActRecordSec(0);
+    setActCamMode("recording");
+    actTimerRef.current  = setInterval(() => setActRecordSec((s) => s + 1), 1000);
+    actCaptureRef.current = setInterval(() => {
+      const video  = actVideoRef.current;
+      const canvas = actCanvasRef.current;
+      if (!video || !canvas || video.readyState < 2) return;
+      const ctx = canvas.getContext("2d");
+      canvas.width  = video.videoWidth  || 640;
+      canvas.height = video.videoHeight || 480;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob((blob) => {
+        if (blob) actSessionRef.current.frames.push(blob);
+      }, "image/jpeg", 0.75);
+    }, 1500);
+  };
+
+  const stopActAndAnalyze = async () => {
+    clearInterval(actTimerRef.current);
+    clearInterval(actCaptureRef.current);
+    setActCamMode("analyzing");
+
+    const frames = actSessionRef.current.frames;
+    if (frames.length === 0) {
+      onToast("⚠️ 캡처된 프레임이 없습니다. 다시 시도해주세요.");
+      setActCamMode("preview");
+      return;
+    }
+    try {
+      onToast("🤖 활동 수행 기록을 분석 중입니다...");
+      const result = await analyzeActivity({
+        frames,
+        activityTitle: recordingAct?.act?.title || "활동",
+        activityDesc:  recordingAct?.act?.desc  || "",
+      });
+      const key      = recordingAct?.key;
+      const savedAct = recordingAct;
+      setActFeedbacks((prev) => ({ ...prev, [key]: result.feedback }));
+      if (savedAct?.index !== undefined) {
+        setDone((prev) => new Set([...prev, savedAct.index]));
+      }
+      stopActCamera();
+      setRecordingAct(null);
+      setShowFeedback({ feedback: result.feedback, actTitle: savedAct?.act?.title });
+      onToast("✅ 활동 기록이 완료되었습니다.");
+    } catch (err) {
+      onToast(`❌ 분석 실패: ${err.message}`);
+      setActCamMode("preview");
+    }
+  };
+
+  const closeRecordingModal = () => {
+    stopActCamera();
+    setRecordingAct(null);
+    setActCamMode("idle");
+  };
+
   const clips   = state.todayClips;
   const reports = state.allReports;
 
-  // 감지된 행동 기반으로 활동 목록 구성
+  // 감지된 행동 기반 활동 목록 구성
   const activities = useMemo(() => {
     if (aiActivities) return aiActivities;
-
     const observedBehaviors = new Set();
     clips.forEach((c) =>
-      c.analysis?.behaviors?.forEach((b) => {
-        if (b.observed) observedBehaviors.add(b.name);
-      })
+      c.analysis?.behaviors?.forEach((b) => { if (b.observed) observedBehaviors.add(b.name); })
     );
-
     if (observedBehaviors.size === 0) return DEFAULT_ACTIVITIES;
-
     const result = [];
     observedBehaviors.forEach((name) => {
       const matched = Object.entries(BEHAVIOR_ACTIVITIES).find(([key]) =>
@@ -73,7 +193,6 @@ export default function TabSolution({ state, onToast }) {
       );
       if (matched) result.push(...matched[1]);
     });
-
     return result.length > 0 ? result : DEFAULT_ACTIVITIES;
   }, [clips, aiActivities]);
 
@@ -88,10 +207,9 @@ export default function TabSolution({ state, onToast }) {
       const observedBehaviors = [];
       clips.forEach((c) =>
         c.analysis?.behaviors?.forEach((b) => {
-          if (b.observed) observedBehaviors.push(`${b.name}(${b.severity})`);
+          if (b.observed) observedBehaviors.push(`${b.name}(${b.frequency})`);
         })
       );
-
       const prompt = `당신은 영유아 발달을 지원하는 육아 정보 안내 AI입니다.
 반드시 한국어로만 답변하세요.
 의료적 처방이나 치료 행위가 아닌, 일반적인 육아 놀이 활동을 안내합니다.
@@ -114,7 +232,7 @@ export default function TabSolution({ state, onToast }) {
 
 ⚠️ 절대 금지: 치료, 처방, 진단, 증상, 병명 등 의료 용어 사용 금지`;
 
-      const result = await callAI(prompt);
+      const result  = await callAI(prompt);
       const cleaned = result.replace(/```json|```/g, "").trim();
       const parsed  = JSON.parse(cleaned);
       setAiActivities(parsed);
@@ -132,8 +250,8 @@ export default function TabSolution({ state, onToast }) {
   };
 
   const slots = [
-    { date: "내일 오전", time: "10:00", ok: true },
-    { date: "모레 오후", time: "14:00", ok: true },
+    { date: "내일 오전",     time: "10:00", ok: true  },
+    { date: "모레 오후",     time: "14:00", ok: true  },
     { date: "이번 주 수요일", time: "11:00", ok: false },
   ];
 
@@ -148,7 +266,7 @@ export default function TabSolution({ state, onToast }) {
           {hasData ? "관찰 기록 기반" : "기본 커리큘럼"}
         </span>
         <h2 className="font-bold text-slate-800 text-lg mt-2">
-          {state.child.name ? `${state.child.name}을(를) 위한` : ""} 참고 활동 안내
+          {state.child.name ? `${state.child.name}을(를) 위한` : ""} 활동 가이드
         </h2>
         {hasData ? (
           <p className="text-xs text-slate-500 mt-1 px-4 leading-relaxed">
@@ -157,8 +275,8 @@ export default function TabSolution({ state, onToast }) {
           </p>
         ) : (
           <p className="text-xs text-slate-500 mt-1 px-4 leading-relaxed">
-            모니터링에서 영상을 요약하면<br />
-            더 정확한 참고 활동 안내가 제공됩니다.
+            모니터링에서 영상을 분석하면<br />
+            더 정확한 맞춤 활동 안내가 제공됩니다.
           </p>
         )}
       </div>
@@ -188,102 +306,177 @@ export default function TabSolution({ state, onToast }) {
         );
         return (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
-            <p className="text-xs font-bold text-amber-700 mb-1">
-              📋 오늘 관찰된 행동 기반 참고 활동
-            </p>
-            <p className="text-[10px] text-amber-600">
-              {[...behaviors].join(" · ")}
-            </p>
+            <p className="text-xs font-bold text-amber-700 mb-1">오늘 관찰된 행동 기반 활동</p>
+            <p className="text-[10px] text-amber-600">{[...behaviors].join(" · ")}</p>
           </div>
         );
       })()}
 
-      {/* 활동 카드 목록 */}
-      <div className="space-y-3">
-        {activities.map((act, i) => (
-          <div
-            key={i}
-            className={cn(
-              "bg-white rounded-xl border shadow-sm overflow-hidden transition-all",
-              done.has(i) ? "border-green-300 opacity-80" : "border-slate-200"
-            )}
-          >
-            {/* 헤더 행 */}
-            <button
-              className="w-full text-left flex items-center gap-3 p-3"
-              onClick={() => setExpanded(expanded === i ? null : i)}
-            >
-              {/* 아이콘 */}
-              <div className={cn(
-                "w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 text-2xl",
-                done.has(i) ? "bg-green-100" : "bg-slate-100"
-              )}>
-                {done.has(i) ? "✅" : act.icon}
-              </div>
-
-              {/* 정보 */}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-slate-800 leading-tight">{act.title}</p>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-[10px] text-slate-400">⏱ {act.duration}</span>
-                  <span className={cn(
-                    "text-[10px] font-bold px-1.5 py-0.5 rounded",
-                    act.source === "전문가 권장"
-                      ? "bg-green-100 text-green-600"
-                      : "bg-slate-100 text-slate-500"
-                  )}>
-                    {act.source === "전문가 권장" ? "👨‍⚕️ 전문가 권장" : "🤖 AI 추천"}
-                  </span>
-                </div>
-              </div>
-
-              <span className="text-slate-300 text-sm flex-shrink-0">
-                {expanded === i ? "▲" : "▼"}
-              </span>
-            </button>
-
-            {/* 상세 내용 */}
-            {expanded === i && !done.has(i) && (
-              <div className="px-3 pb-3 space-y-3">
-                {/* 활동 설명 */}
-                <div className="bg-slate-50 rounded-lg p-3">
-                  <p className="text-xs font-bold text-slate-600 mb-1.5">📝 활동 방법</p>
-                  <p className="text-xs text-slate-700 leading-relaxed">{act.desc}</p>
-                </div>
-
-                {/* 소요 시간 */}
-                <div className="flex items-center gap-2 text-xs text-slate-500">
-                  <span>⏱ 권장 시간:</span>
-                  <span className="font-bold text-slate-700">{act.duration}</span>
-                </div>
-
-                {/* 완료 버튼 */}
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => markDone(i)}
-                    className="flex-1 bg-green-50 border border-green-200 text-green-700 text-xs font-bold py-2.5 rounded-lg hover:bg-green-100 transition-colors"
-                  >
-                    ✅ 오늘 완료
-                  </button>
-                  <button
-                    onClick={() => { setExpanded(null); onToast("📌 나중에 하기 목록에 저장되었습니다."); }}
-                    className="flex-1 bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold py-2.5 rounded-lg hover:bg-blue-100 transition-colors"
-                  >
-                    📌 나중에 하기
-                  </button>
-                </div>
-              </div>
-            )}
+      {/* ── 전문가 추천 활동 ── */}
+      <div className="bg-white rounded-xl border border-blue-100 shadow-sm overflow-hidden">
+        <div className="px-4 py-3 border-b border-blue-100 bg-blue-50 flex justify-between items-center">
+          <div>
+            <p className="font-bold text-sm text-slate-800">전문가 추천 활동</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">전문가가 직접 등록한 맞춤 활동</p>
           </div>
-        ))}
+          <button
+            onClick={() => setShowAddDoctor(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors active:scale-95"
+          >
+            + 추가
+          </button>
+        </div>
+
+        {(state.doctorActivities || []).length === 0 ? (
+          <div className="py-7 text-center">
+            <p className="text-sm text-slate-400">등록된 전문가 추천 활동이 없습니다</p>
+            <p className="text-xs text-slate-300 mt-1">+ 추가 버튼으로 활동을 등록하세요</p>
+          </div>
+        ) : (
+          (state.doctorActivities || []).map((act) => {
+            const key      = `doc_${act.id}`;
+            const feedback = actFeedbacks[key];
+            return (
+              <div key={act.id} className="p-3 border-b border-slate-100 last:border-0">
+                <div className="mb-2">
+                  <span className="text-[9px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">
+                    전문가 추천
+                  </span>
+                  <p className="text-sm font-bold text-slate-800 mt-1">{act.title}</p>
+                  {act.desc && (
+                    <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">{act.desc}</p>
+                  )}
+                  <p className="text-[10px] text-slate-400 mt-1">⏱ {act.duration}</p>
+                </div>
+                {feedback ? (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-2.5 flex items-center justify-between">
+                    <div>
+                      <p className="text-[10px] font-bold text-green-700">수행 기록 완료</p>
+                      <p className="text-[10px] text-green-600 mt-0.5 leading-relaxed line-clamp-1">
+                        {feedback.encouragement}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setShowFeedback({ feedback, actTitle: act.title })}
+                      className="text-[10px] text-green-700 font-bold underline flex-shrink-0 ml-2"
+                    >
+                      결과 보기
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setRecordingAct({ act, key })}
+                    className="w-full bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold py-2.5 rounded-xl transition-colors active:scale-95"
+                  >
+                    수락 · 영상 촬영
+                  </button>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* ── AI 추천 활동 목록 ── */}
+      <div className="space-y-3">
+        {activities.map((act, i) => {
+          const key      = `reg_${i}`;
+          const feedback = actFeedbacks[key];
+          return (
+            <div
+              key={i}
+              className={cn(
+                "bg-white rounded-xl border shadow-sm overflow-hidden transition-all",
+                done.has(i) ? "border-green-300 opacity-80" : "border-slate-200"
+              )}
+            >
+              {/* 헤더 행 */}
+              <button
+                className="w-full text-left flex items-center gap-3 p-3"
+                onClick={() => setExpanded(expanded === i ? null : i)}
+              >
+                <div className={cn(
+                  "w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 text-2xl",
+                  done.has(i) ? "bg-green-100" : "bg-slate-100"
+                )}>
+                  {done.has(i) ? "✅" : act.icon}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-slate-800 leading-tight">{act.title}</p>
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    <span className="text-[10px] text-slate-400">⏱ {act.duration}</span>
+                    <span className={cn(
+                      "text-[10px] font-bold px-1.5 py-0.5 rounded",
+                      act.source === "전문가 권장"
+                        ? "bg-green-100 text-green-600"
+                        : "bg-slate-100 text-slate-500"
+                    )}>
+                      {act.source === "전문가 권장" ? "👨‍⚕️ 전문가 권장" : "🤖 AI 추천"}
+                    </span>
+                    {feedback && (
+                      <span className="text-[10px] font-bold bg-green-100 text-green-600 px-1.5 py-0.5 rounded">
+                        기록 완료
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <span className="text-slate-300 text-sm flex-shrink-0">
+                  {expanded === i ? "▲" : "▼"}
+                </span>
+              </button>
+
+              {/* 상세 내용 */}
+              {expanded === i && !done.has(i) && (
+                <div className="px-3 pb-3 space-y-3">
+                  <div className="bg-slate-50 rounded-lg p-3">
+                    <p className="text-xs font-bold text-slate-600 mb-1.5">활동 방법</p>
+                    <p className="text-xs text-slate-700 leading-relaxed">{act.desc}</p>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <span>⏱ 권장 시간:</span>
+                    <span className="font-bold text-slate-700">{act.duration}</span>
+                  </div>
+
+                  {feedback ? (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-2.5 flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] font-bold text-green-700">수행 기록 완료</p>
+                        <p className="text-[10px] text-green-600 mt-0.5 line-clamp-1">
+                          {feedback.encouragement}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setShowFeedback({ feedback, actTitle: act.title })}
+                        className="text-[10px] text-green-700 font-bold underline ml-2 flex-shrink-0"
+                      >
+                        결과 보기
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setRecordingAct({ act, key, index: i })}
+                        className="flex-1 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold py-2.5 rounded-lg transition-colors active:scale-95"
+                      >
+                        수락 · 영상 촬영
+                      </button>
+                      <button
+                        onClick={() => markDone(i)}
+                        className="flex-1 bg-green-50 border border-green-200 text-green-700 text-xs font-bold py-2.5 rounded-lg hover:bg-green-100 transition-colors"
+                      >
+                        ✅ 완료 체크
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* AI 맞춤 활동 추가 생성 */}
-      <Button
-        variant="primary"
-        onClick={generateAIActivities}
-        disabled={aiLoading}
-      >
+      <Button variant="primary" onClick={generateAIActivities} disabled={aiLoading}>
         {aiLoading ? "🤖 AI 활동 생성 중..." : "🤖 AI 맞춤 활동 추가 생성"}
       </Button>
 
@@ -292,9 +485,264 @@ export default function TabSolution({ state, onToast }) {
         📞 발달 상담 예약하기
       </Button>
 
+      {/* ── 모달: 전문가 추천 활동 추가 ── */}
+      <Modal
+        open={showAddDoctor}
+        onClose={() => { setShowAddDoctor(false); setNewActTitle(""); setNewActDesc(""); setNewActDuration("10분"); }}
+        title="전문가 추천 활동 추가"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">
+            아이에게 필요한 활동을 등록합니다.<br />
+            보호자가 활동을 수행하고 영상으로 기록할 수 있습니다.
+          </p>
+          <div>
+            <label className="text-xs font-bold text-slate-600 block mb-1">
+              활동 이름 <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={newActTitle}
+              onChange={(e) => setNewActTitle(e.target.value)}
+              placeholder="예: 눈맞춤 강화 — 거품 불기"
+              className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-blue-400"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-slate-600 block mb-1">활동 방법 설명</label>
+            <textarea
+              value={newActDesc}
+              onChange={(e) => setNewActDesc(e.target.value)}
+              placeholder="활동 방법을 구체적으로 입력해주세요"
+              rows={3}
+              className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-blue-400 resize-none"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-slate-600 block mb-1">권장 시간</label>
+            <select
+              value={newActDuration}
+              onChange={(e) => setNewActDuration(e.target.value)}
+              className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-blue-400"
+            >
+              {["5분", "10분", "15분", "20분", "30분"].map((d) => (
+                <option key={d}>{d}</option>
+              ))}
+            </select>
+          </div>
+          <div className="bg-slate-50 rounded-lg p-3">
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              ※ 등록된 활동은 가정 내 육아 활동 참고용입니다.<br />
+              의료적 처방이나 치료 행위가 아닙니다.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={() => { setShowAddDoctor(false); setNewActTitle(""); setNewActDesc(""); }}>
+              취소
+            </Button>
+            <Button
+              variant="dark"
+              onClick={() => {
+                if (!newActTitle.trim()) { onToast("활동 이름을 입력해주세요."); return; }
+                dispatch({
+                  type: "ADD_DOCTOR_ACTIVITY",
+                  activity: {
+                    id:       `dact_${Date.now()}`,
+                    title:    newActTitle.trim(),
+                    desc:     newActDesc.trim(),
+                    duration: newActDuration,
+                    source:   "전문가 추천",
+                    icon:     "📋",
+                  },
+                });
+                setShowAddDoctor(false);
+                setNewActTitle(""); setNewActDesc(""); setNewActDuration("10분");
+                onToast("✅ 활동이 등록되었습니다.");
+              }}
+            >
+              활동 등록
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── 모달: 활동 수행 촬영 ── */}
+      <Modal
+        open={recordingAct !== null}
+        onClose={closeRecordingModal}
+        title="활동 수행 촬영"
+      >
+        <div className="space-y-3">
+          {/* 활동 정보 요약 */}
+          {recordingAct && (
+            <div className="bg-blue-50 border border-blue-100 rounded-lg p-3">
+              <p className="text-xs font-bold text-blue-800">{recordingAct.act.title}</p>
+              {recordingAct.act.desc && (
+                <p className="text-[11px] text-blue-600 mt-0.5 leading-relaxed line-clamp-2">
+                  {recordingAct.act.desc}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* 카메라 뷰 */}
+          <div className="bg-slate-800 rounded-xl overflow-hidden">
+            <div className="relative bg-black" style={{ aspectRatio: "4/3" }}>
+              <video
+                ref={actVideoRef}
+                autoPlay
+                playsInline
+                muted
+                className={cn("w-full h-full object-cover", actCamMode === "idle" && "hidden")}
+              />
+              {actCamMode === "idle" && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+                  <span className="text-4xl">📷</span>
+                  <p className="text-slate-400 text-xs text-center px-4">
+                    아이가 활동하는 모습을<br />카메라로 촬영해주세요
+                  </p>
+                </div>
+              )}
+              {actCamMode === "analyzing" && (
+                <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-2">
+                  <div className="text-3xl animate-spin">🤖</div>
+                  <p className="text-white text-sm font-bold">활동 기록 분석 중...</p>
+                  <p className="text-slate-400 text-xs">잠시만 기다려주세요</p>
+                </div>
+              )}
+              {actCamMode === "recording" && (
+                <div className="absolute top-2 left-2 flex items-center gap-1.5 bg-black/50 px-2 py-1 rounded-full">
+                  <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                  <span className="text-red-400 text-[11px] font-bold">
+                    REC {String(Math.floor(actRecordSec / 60)).padStart(2, "0")}:
+                        {String(actRecordSec % 60).padStart(2, "0")}
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="p-2 flex gap-2">
+              {actCamMode === "idle" && (
+                <button
+                  onClick={startActCamera}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2.5 rounded-lg transition-colors"
+                >
+                  카메라 켜기
+                </button>
+              )}
+              {actCamMode === "preview" && (
+                <button
+                  onClick={startActRecording}
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-2.5 rounded-lg transition-colors"
+                >
+                  ⏺ 촬영 시작
+                </button>
+              )}
+              {actCamMode === "recording" && (
+                <button
+                  onClick={stopActAndAnalyze}
+                  className="flex-1 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold py-2.5 rounded-lg transition-colors"
+                >
+                  ⏹ 촬영 완료 · AI 분석
+                </button>
+              )}
+              {actCamMode === "analyzing" && (
+                <div className="flex-1 bg-slate-700 text-slate-400 text-xs font-bold py-2.5 rounded-lg text-center cursor-not-allowed">
+                  분석 중...
+                </div>
+              )}
+            </div>
+          </div>
+
+          <p className="text-[11px] text-slate-400 text-center leading-relaxed">
+            아이가 활동을 수행하는 모습을 촬영하세요.<br />
+            AI가 활동 참여 모습을 관찰 기록합니다.
+          </p>
+          <p className="text-[10px] text-slate-300 text-center">
+            ※ 본 기록은 활동 참여 관찰 자료입니다. 의료적 평가가 아닙니다.
+          </p>
+        </div>
+      </Modal>
+
+      {/* ── 모달: 활동 기록 결과 ── */}
+      <Modal
+        open={!!showFeedback}
+        onClose={() => setShowFeedback(null)}
+        title="활동 기록 결과"
+      >
+        {showFeedback && (
+          <div className="space-y-3">
+            {/* 참여도 헤더 */}
+            <div className="text-center pt-1 pb-2">
+              <p className="text-3xl mb-1.5">
+                {PARTICIPATION_ICON[showFeedback.feedback.participationLevel] || "👍"}
+              </p>
+              <p className="font-bold text-slate-800 text-sm">{showFeedback.actTitle}</p>
+              <span className={cn(
+                "text-[10px] font-bold px-2.5 py-0.5 rounded-full mt-1.5 inline-block",
+                PARTICIPATION_STYLE[showFeedback.feedback.participationLevel] || "bg-blue-100 text-blue-700"
+              )}>
+                {PARTICIPATION_LABEL[showFeedback.feedback.participationLevel] || "참여했어요"}
+              </span>
+            </div>
+
+            {/* 관찰 내용 */}
+            <div className="bg-slate-50 rounded-lg p-3">
+              <p className="text-xs font-bold text-slate-600 mb-1">관찰된 모습</p>
+              <p className="text-xs text-slate-700 leading-relaxed">
+                {showFeedback.feedback.activitySummary}
+              </p>
+            </div>
+
+            {/* 관찰 행동 목록 */}
+            {showFeedback.feedback.observedBehaviors?.length > 0 && (
+              <div className="bg-slate-50 rounded-lg p-3">
+                <p className="text-xs font-bold text-slate-600 mb-1.5">관찰된 행동</p>
+                <div className="space-y-1">
+                  {showFeedback.feedback.observedBehaviors.map((b, i) => (
+                    <p key={i} className="text-xs text-slate-600 flex gap-1.5">
+                      <span className="flex-shrink-0 text-slate-400">·</span>
+                      <span>{b}</span>
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 응원 메시지 */}
+            <div className="bg-green-50 border border-green-100 rounded-lg p-3">
+              <p className="text-xs font-bold text-green-700 mb-0.5">오늘의 응원</p>
+              <p className="text-xs text-green-800 leading-relaxed">
+                {showFeedback.feedback.encouragement}
+              </p>
+            </div>
+
+            {/* 다음 시도 팁 */}
+            {showFeedback.feedback.improvementTips?.length > 0 && (
+              <div className="bg-blue-50 border border-blue-100 rounded-lg p-3">
+                <p className="text-xs font-bold text-blue-700 mb-1.5">다음에는 이렇게 해보세요</p>
+                <div className="space-y-1">
+                  {showFeedback.feedback.improvementTips.map((tip, i) => (
+                    <p key={i} className="text-xs text-blue-800 flex gap-1.5">
+                      <span className="flex-shrink-0">·</span>
+                      <span>{tip}</span>
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <p className="text-[10px] text-slate-400 text-center leading-relaxed">
+              ※ 본 기록은 활동 참여 관찰 참고 자료입니다.<br />
+              의료적 평가나 진단이 아닙니다.
+            </p>
+            <Button variant="primary" onClick={() => setShowFeedback(null)}>확인</Button>
+          </div>
+        )}
+      </Modal>
+
+      {/* ── 모달: 발달 상담 예약 ── */}
       <Modal open={showSched} onClose={() => setShowSched(false)} title="발달 상담 예약">
         <div className="space-y-4">
-          {/* 전문가 선택 */}
           <div>
             <p className="text-xs font-bold text-slate-600 mb-2">상담 전문가 선택</p>
             <div className="grid grid-cols-2 gap-2">
@@ -322,12 +770,9 @@ export default function TabSolution({ state, onToast }) {
             </div>
           </div>
 
-          {/* 일정 선택 */}
           {selectedSpecialist && (
             <div>
-              <p className="text-xs font-bold text-slate-600 mb-2">
-                원하시는 일정을 선택하세요
-              </p>
+              <p className="text-xs font-bold text-slate-600 mb-2">원하시는 일정을 선택하세요</p>
               <div className="space-y-2">
                 {slots.map((slot) => (
                   <button

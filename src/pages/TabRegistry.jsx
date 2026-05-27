@@ -31,7 +31,7 @@ export default function TabRegistry({ state, dispatch, onToast }) {
         .slice(0, 10)
         .map((r, i) =>
           `[${i + 1}번 기록 / ${new Date(r.createdAt).toLocaleDateString("ko-KR")}]\n` +
-          `이상 감지: ${r.analysis?.flagged ? "예" : "아니오"} / ` +
+          `이상 감지: ${r.analysis?.attentionNeeded ? "예" : "아니오"} / ` +
           `신뢰도: ${r.analysis?.confidence ?? "-"}% / ` +
           `요약: ${r.analysis?.summary || "없음"}`
         )
@@ -135,7 +135,7 @@ ${reportSummaries}
           </div>
           <div className="bg-slate-700 rounded-lg p-2.5 text-center">
             <p className="text-xl font-bold text-red-400">
-              {reports.filter((r) => r.analysis?.flagged).length}
+              {reports.filter((r) => r.analysis?.attentionNeeded).length}
             </p>
             <p className="text-[10px] text-slate-400">이상 감지 건</p>
           </div>
@@ -236,10 +236,10 @@ ${reportSummaries}
               <div
                 className={cn(
                   "w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 text-lg",
-                  r.analysis?.flagged ? "bg-red-100" : "bg-green-100"
+                  r.analysis?.attentionNeeded ? "bg-red-100" : "bg-green-100"
                 )}
               >
-                {r.analysis?.flagged ? "⚠️" : "✅"}
+                {r.analysis?.attentionNeeded ? "⚠️" : "✅"}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-bold text-slate-800">
@@ -249,7 +249,7 @@ ${reportSummaries}
                   })}
                 </p>
                 <p className="text-[10px] text-slate-400 mt-0.5 truncate">
-                  {r.analysis?.flagged ? "이상 행동 감지" : "특이 행동 관찰 없음"} ·
+                  {r.analysis?.attentionNeeded ? "주의 행동 관찰됨" : "특이 행동 관찰 없음"} ·
                   신뢰도 {r.analysis?.confidence ?? "-"}%
                 </p>
               </div>
