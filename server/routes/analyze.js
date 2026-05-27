@@ -91,15 +91,66 @@ router.post("/frames", upload.array("frames", 30), async (req, res) => {
 ${hintText}
 아래 JSON 형식으로만 응답하세요. 반드시 한국어로 작성하세요. 다른 텍스트 없이 JSON만 출력하세요.
 
+behaviors 배열은 반드시 아래 9개 항목을 순서 그대로 포함해야 합니다.
+각 항목을 영상에서 관찰하고 observed / frequency / note를 작성하세요.
+
 {
   "attentionNeeded": true/false,
   "observationScore": 0~100,
   "behaviors": [
     {
-      "name": "관찰된 행동명 (한국어)",
+      "name": "회전 행동 (자신 또는 물건을 빙빙 돌림)",
       "observed": true/false,
       "frequency": "none|occasional|frequent",
-      "note": "관찰된 행동을 사실 그대로 묘사 (한국어)"
+      "note": "관찰된 내용을 사실 그대로 묘사. 관찰되지 않으면 '관찰되지 않음'"
+    },
+    {
+      "name": "몸 앞뒤 흔들기",
+      "observed": true/false,
+      "frequency": "none|occasional|frequent",
+      "note": "관찰된 내용을 사실 그대로 묘사. 관찰되지 않으면 '관찰되지 않음'"
+    },
+    {
+      "name": "보호자 행동 모방 없음",
+      "observed": true/false,
+      "frequency": "none|occasional|frequent",
+      "note": "보호자 행동에 대한 아동의 모방 여부. 영상에서 판단 불가시 '영상에서 확인 어려움'"
+    },
+    {
+      "name": "급격한 홱 움직임",
+      "observed": true/false,
+      "frequency": "none|occasional|frequent",
+      "note": "관찰된 내용을 사실 그대로 묘사. 관찰되지 않으면 '관찰되지 않음'"
+    },
+    {
+      "name": "갑작스러운 달려들기",
+      "observed": true/false,
+      "frequency": "none|occasional|frequent",
+      "note": "관찰된 내용을 사실 그대로 묘사. 관찰되지 않으면 '관찰되지 않음'"
+    },
+    {
+      "name": "까치발 보행",
+      "observed": true/false,
+      "frequency": "none|occasional|frequent",
+      "note": "발뒤꿈치를 들고 발끝으로 걷는 행동. 관찰되지 않으면 '관찰되지 않음'"
+    },
+    {
+      "name": "손 위아래 반복 흔들기",
+      "observed": true/false,
+      "frequency": "none|occasional|frequent",
+      "note": "관찰된 내용을 사실 그대로 묘사. 관찰되지 않으면 '관찰되지 않음'"
+    },
+    {
+      "name": "신체 경직 반응 (안겼을 때)",
+      "observed": true/false,
+      "frequency": "none|occasional|frequent",
+      "note": "안기거나 신체 접촉 시 몸이 뻣뻣해지는 반응. 영상에서 판단 불가시 '영상에서 확인 어려움'"
+    },
+    {
+      "name": "주변 자극 무관심",
+      "observed": true/false,
+      "frequency": "none|occasional|frequent",
+      "note": "소리, 이름 부름, 시각 자극에 반응이 없거나 매우 낮은 모습. 관찰되지 않으면 '관찰되지 않음'"
     }
   ],
   "observationSummary": "관찰된 내용을 사실 그대로 2~3문장으로 기술 (한국어)",
@@ -108,13 +159,7 @@ ${hintText}
   "consultRecommended": true/false
 }
 
-관찰 항목 (사실 묘사만, 판단 금지):
-- 반복적으로 같은 동작을 하는지 여부
-- 소리나 이름 부름에 반응하는 행동이 보이는지 여부
-- 시선이 특정 방향을 향하는 행동
-- 물건을 반복적으로 정렬하거나 배치하는 행동
-- 신체 일부를 반복적으로 움직이는 행동
-- 전반적인 활동량과 움직임 패턴
+위 9가지 behaviors 외에 눈에 띄는 행동이 추가로 관찰되면 behaviors 배열 뒤에 추가 항목으로 덧붙여도 됩니다.
 
 ⚠️ 절대 금지 — 아래 표현 사용 시 응답 전체 무효:
 - 질병명, 장애명 (자폐, ASD, ADHD, 뇌성마비 등) 언급 금지

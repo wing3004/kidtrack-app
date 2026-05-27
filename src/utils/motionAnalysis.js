@@ -195,41 +195,218 @@ export function analyzeMovementComplexity(grid) {
   return { complexity, smoothness };
 }
 
+// ─────────────────────────────────────────────────────────────
+// 논문 근거 이상행동 감지 함수들
+// 출처: 영유아 발달 이상행동 지표 (발달재활 임상 관찰 기준)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * 몸 앞뒤 흔들기 감지 (상동 행동)
+ * - lag 3~7 자기상관에서 중간 주파수 진동 패턴 탐지
+ * @param {number[]} motionHistory
+ * @returns {{ detected: boolean, confidence: number }}
+ */
+export function detectBodyRocking(motionHistory) {
+  if (motionHistory.length < 14) return { detected: false, confidence: 0 };
+
+  const recent   = motionHistory.slice(-24);
+  const mean     = recent.reduce((a, b) => a + b, 0) / recent.length;
+  const variance = recent.reduce((a, b) => a + (b - mean) ** 2, 0) / recent.length;
+
+  // 움직임 자체가 미미하면 흔들기 아님
+  if (mean < 2 || variance < 3) return { detected: false, confidence: 0 };
+
+  // lag 3~7 (1.5~3.5초 주기) 에서 자기상관 피크 계산
+  let rockScore = 0;
+  for (let lag = 3; lag <= 7; lag++) {
+    let corr = 0;
+    for (let i = 0; i < recent.length - lag; i++) {
+      corr += (recent[i] - mean) * (recent[i + lag] - mean);
+    }
+    corr /= (recent.length - lag) * variance;
+    if (corr > 0.25) rockScore++;
+  }
+
+  const confidence = Math.min(100, rockScore * 22);
+  return { detected: confidence >= 55, confidence };
+}
+
+/**
+ * 급격한 홱 움직임 감지
+ * - 연속 프레임 간 delta가 평균의 2배 + 2.5σ 이상인 스파이크 탐지
+ * @param {number[]} motionHistory
+ * @returns {{ detected: boolean, count: number }}
+ */
+export function detectJerkyMovements(motionHistory) {
+  if (motionHistory.length < 6) return { detected: false, count: 0 };
+
+  const recent = motionHistory.slice(-20);
+  const mean   = recent.reduce((a, b) => a + b, 0) / recent.length;
+  const std    = Math.sqrt(recent.reduce((a, b) => a + (b - mean) ** 2, 0) / recent.length);
+
+  let spikeCount = 0;
+  for (let i = 1; i < recent.length; i++) {
+    const delta = Math.abs(recent[i] - recent[i - 1]);
+    if (delta > Math.max(mean * 2.0, std * 2.5)) spikeCount++;
+  }
+
+  return { detected: spikeCount >= 3, count: spikeCount };
+}
+
+/**
+ * 손 위아래 반복 흔들기 감지 (Hand flapping)
+ * - 화면 상단 2행 구역의 고주파 반복 움직임 탐지
+ * @param {number[][][]} gridHistory  — 각 요소는 GRID_ROWS × GRID_COLS 배열
+ * @returns {{ detected: boolean, confidence: number }}
+ */
+export function detectHandFlapping(gridHistory) {
+  if (gridHistory.length < 8) return { detected: false, confidence: 0 };
+
+  const upperMotions = gridHistory.slice(-16).map((grid) => {
+    if (!grid || grid.length < 2) return 0;
+    return (
+      grid[0].reduce((a, b) => a + b, 0) +
+      grid[1].reduce((a, b) => a + b, 0)
+    );
+  });
+
+  const mean = upperMotions.reduce((a, b) => a + b, 0) / upperMotions.length;
+  if (mean < 5) return { detected: false, confidence: 0 };
+
+  // 고주파 = 평균 위/아래 교차 횟수 많음
+  let crossings  = 0;
+  let prevAbove  = upperMotions[0] >= mean;
+  for (let i = 1; i < upperMotions.length; i++) {
+    const currAbove = upperMotions[i] >= mean;
+    if (currAbove !== prevAbove) { crossings++; prevAbove = currAbove; }
+  }
+
+  const confidence = Math.min(100, crossings * 9);
+  return { detected: crossings >= 6 && confidence > 45, confidence };
+}
+
+/**
+ * 회전/빙빙 돌기 감지 (Spinning)
+ * - 프레임별 움직임 피크 컬럼이 좌↔우로 순환하는 패턴 탐지
+ * @param {number[][][]} gridHistory
+ * @returns {{ detected: boolean, confidence: number }}
+ */
+export function detectSpinning(gridHistory) {
+  if (gridHistory.length < 10) return { detected: false, confidence: 0 };
+
+  const recent = gridHistory.slice(-10);
+  const COLS   = recent[0]?.[0]?.length || GRID_COLS;
+
+  // 각 프레임에서 움직임이 가장 많은 열 index
+  const peakCols = recent.map((grid) => {
+    if (!grid) return 0;
+    const colTotals = Array(COLS).fill(0);
+    grid.forEach((row) => row.forEach((v, c) => { colTotals[c] += v; }));
+    return colTotals.indexOf(Math.max(...colTotals));
+  });
+
+  // 피크 열이 좌↔우↔좌 방향 전환 횟수
+  let dirChanges = 0;
+  for (let i = 2; i < peakCols.length; i++) {
+    const d1 = peakCols[i - 1] - peakCols[i - 2];
+    const d2 = peakCols[i]     - peakCols[i - 1];
+    if ((d1 > 1 && d2 < -1) || (d1 < -1 && d2 > 1)) dirChanges++;
+  }
+
+  const confidence = Math.min(100, dirChanges * 25);
+  return { detected: dirChanges >= 3, confidence };
+}
+
 /**
  * 세션 전체 분석 결과를 종합 점수로 변환
- * @param {{ motionHistory, vectorHistory, repetitive, asymmetry, complexity }} sessionData
- * @returns {{ observationScore: number, attentionFlags: string[], summary: string }}
+ * — 논문 기반 9가지 이상행동 항목 반영
+ *
+ * @param {{ motionHistory, vectorHistory, repetitive, asymmetry, complexity, gridHistory }} sessionData
+ * @returns {{ observationScore: number, attentionFlags: string[], summary: string, avgMotion: number }}
  */
 export function computeSessionScore(sessionData) {
-  const { motionHistory, vectorHistory, repetitive, asymmetry, complexity } = sessionData;
+  const {
+    motionHistory,
+    repetitive,
+    asymmetry,
+    complexity,
+    gridHistory = [],
+  } = sessionData;
 
   const attentionFlags = [];
   let deduction = 0;
 
-  // 상동 행동 감지
-  if (repetitive.detected) {
-    attentionFlags.push(`반복 움직임 패턴 관찰 (빈도 약 ${repetitive.frequency}Hz)`);
-    deduction += 25;
-  }
+  // ── 논문 근거 이상행동 9가지 ───────────────────────────────
 
-  // 좌우 비대칭
-  if (asymmetry.attentionNeeded) {
-    attentionFlags.push(`${asymmetry.dominantSide} 편측 움직임 집중 (비대칭도 ${asymmetry.asymmetryScore}%)`);
+  // ① 회전 행동 (자신/물건을 빙빙 돌림)
+  const spinning = detectSpinning(gridHistory);
+  if (spinning.detected) {
+    attentionFlags.push("회전성 반복 움직임(빙빙 돌기)이 관찰됨");
     deduction += 20;
   }
 
-  // 움직임 매우 적음 (무반응 가능성)
-  const avgMotion = motionHistory.length > 0
-    ? motionHistory.reduce((a, b) => a + b, 0) / motionHistory.length
-    : 0;
-  if (avgMotion < 3 && motionHistory.length > 10) {
-    attentionFlags.push("전반적인 움직임 매우 적음 (무반응 가능성)");
+  // ② 몸 앞뒤 흔들기
+  const rocking = detectBodyRocking(motionHistory);
+  if (rocking.detected) {
+    attentionFlags.push("몸을 앞뒤로 반복적으로 흔드는 행동이 관찰됨");
+    deduction += 25;
+  } else if (repetitive.detected && !spinning.detected) {
+    // 기존 반복 패턴 (흔들기로 분류되지 않은 상동 행동)
+    attentionFlags.push(`반복적인 움직임 패턴이 관찰됨 (빈도 약 ${repetitive.frequency}Hz)`);
+    deduction += 20;
+  }
+
+  // ③ 보호자 행동 모방 없음 — 로컬 알고리즘으로는 감지 불가
+  //    → Claude Vision이 단독 판단 (attentionFlags에 추가 안 함)
+
+  // ④ 급격한 홱 움직임
+  const jerky = detectJerkyMovements(motionHistory);
+  if (jerky.detected) {
+    attentionFlags.push(`몸을 급하게 홱 움직이는 행동이 ${jerky.count}회 관찰됨`);
     deduction += 15;
   }
 
-  // 복잡성 낮음 (단조로운 움직임)
+  // ⑤ 갑자기 달려드는 행동 — 갑작스러운 대형 모션 스파이크로 근사
+  //    jerky와 겹치지 않도록, 극단적 스파이크(top 5%) 따로 체크
+  const avgMotion = motionHistory.length > 0
+    ? motionHistory.reduce((a, b) => a + b, 0) / motionHistory.length
+    : 0;
+  const maxMotion = motionHistory.length > 0 ? Math.max(...motionHistory) : 0;
+  if (!jerky.detected && maxMotion > avgMotion * 4 && maxMotion > 20) {
+    attentionFlags.push("갑작스럽고 충동적인 큰 움직임이 관찰됨");
+    deduction += 10;
+  }
+
+  // ⑥ 까치발 보행 — 픽셀 차분으로는 감지 불가 → Claude Vision 단독
+
+  // ⑦ 손 위아래 반복 흔들기 (hand flapping)
+  const flapping = detectHandFlapping(gridHistory);
+  if (flapping.detected) {
+    attentionFlags.push("손을 위아래로 반복적으로 흔드는 행동이 관찰됨");
+    deduction += 20;
+  }
+
+  // ⑧ 안겼을 때 신체 경직 — 카메라 관찰로 감지 불가 → Claude Vision 단독
+
+  // ⑨ 주변 자극 무관심 (무반응)
+  if (avgMotion < 3 && motionHistory.length > 10) {
+    attentionFlags.push("주변 자극에 대한 반응 움직임이 매우 적게 관찰됨");
+    deduction += 15;
+  }
+
+  // ── 추가 보조 지표 ────────────────────────────────────────
+
+  // 좌우 비대칭 (편측 움직임)
+  if (asymmetry.attentionNeeded) {
+    attentionFlags.push(
+      `${asymmetry.dominantSide} 편측 움직임 집중 관찰 (비대칭도 ${asymmetry.asymmetryScore}%)`
+    );
+    deduction += 20;
+  }
+
+  // 단조로운 움직임 패턴
   if (complexity.complexity < 20 && avgMotion > 5) {
-    attentionFlags.push("움직임 다양성 낮음 (단조로운 패턴)");
+    attentionFlags.push("움직임 다양성이 낮고 단조로운 패턴이 관찰됨");
     deduction += 10;
   }
 

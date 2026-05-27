@@ -6,6 +6,10 @@ import {
   analyzeAsymmetry,
   analyzeMovementComplexity,
   computeSessionScore,
+  detectBodyRocking,
+  detectJerkyMovements,
+  detectHandFlapping,
+  detectSpinning,
 } from "../utils/motionAnalysis";
 import Button from "../components/Button";
 import Modal from "../components/Modal";
@@ -88,6 +92,7 @@ export default function TabMonitor({ state, dispatch, onToast }) {
     frames:        [],
     motionHistory: [],
     vectorHistory: [],
+    gridHistory:   [],   // 구역별 움직임 그리드 이력 (새 감지 알고리즘용)
     prevImageData: null,
     repetitive:    { detected: false, frequency: 0, confidence: 0 },
     asymmetry:     { asymmetryScore: 0, dominantSide: "unknown", attentionNeeded: false },
@@ -161,6 +166,7 @@ export default function TabMonitor({ state, dispatch, onToast }) {
       frames:        [],
       motionHistory: [],
       vectorHistory: [],
+      gridHistory:   [],
       prevImageData: null,
       repetitive:    { detected: false, frequency: 0, confidence: 0 },
       asymmetry:     { asymmetryScore: 0, dominantSide: "unknown", attentionNeeded: false },
@@ -198,6 +204,10 @@ export default function TabMonitor({ state, dispatch, onToast }) {
 
         // 3. 복잡성 분석
         session.complexity = analyzeMovementComplexity(vector.grid);
+
+        // 3-1. 구역별 그리드 이력 누적 (회전/손 흔들기 감지용)
+        session.gridHistory.push(vector.grid);
+        if (session.gridHistory.length > 40) session.gridHistory.shift(); // 최대 40프레임 유지
 
         // 4. 반복 패턴 감지
         session.repetitive = detectRepetitivePattern(session.motionHistory);
@@ -251,6 +261,7 @@ export default function TabMonitor({ state, dispatch, onToast }) {
       const localScore = computeSessionScore({
         motionHistory: session.motionHistory,
         vectorHistory: session.vectorHistory,
+        gridHistory:   session.gridHistory,
         repetitive:    session.repetitive,
         asymmetry:     session.asymmetry,
         complexity:    session.complexity,
