@@ -11,7 +11,7 @@
 const GRID_COLS  = 8;   // 화면을 8x6 구역으로 분할
 const GRID_ROWS  = 6;
 const REPEAT_WINDOW = 10; // 반복 패턴 감지 윈도우 (프레임 수)
-const ASYMMETRY_THRESHOLD = 0.35; // 좌우 비대칭 판정 기준
+const ASYMMETRY_THRESHOLD = 0.25; // 좌우 비대칭 판정 기준 (25% 이상 편중 시 플래그)
 
 /**
  * 두 프레임 사이의 픽셀 차분으로 움직임 벡터 계산
@@ -121,7 +121,7 @@ export function detectRepetitivePattern(motionHistory) {
     100,
     Math.round((autocorrSum / Math.max(variance, 1)) * 20)
   );
-  const detected   = confidence > 40 && peakCount >= 3;
+  const detected   = confidence > 30 && peakCount >= 2;
 
   // 대략적 주파수 (Hz) — 500ms 간격 기준
   const frequency = detected ? peakCount / (REPEAT_WINDOW * 0.5) : 0;
@@ -147,7 +147,7 @@ export function analyzeAsymmetry(history) {
   const avgRight = recent.reduce((a, b) => a + b.rightMotion, 0) / recent.length;
   const total    = avgLeft + avgRight;
 
-  if (total < 100) {
+  if (total < 50) {
     return { asymmetryScore: 0, dominantSide: "none", attentionNeeded: false };
   }
 
@@ -213,10 +213,8 @@ export function detectBodyRocking(motionHistory) {
   const mean     = recent.reduce((a, b) => a + b, 0) / recent.length;
   const variance = recent.reduce((a, b) => a + (b - mean) ** 2, 0) / recent.length;
 
-  // 움직임 자체가 미미하면 흔들기 아님
-  if (mean < 2 || variance < 3) return { detected: false, confidence: 0 };
+  if (mean < 1.5 || variance < 2) return { detected: false, confidence: 0 };
 
-  // lag 3~7 (1.5~3.5초 주기) 에서 자기상관 피크 계산
   let rockScore = 0;
   for (let lag = 3; lag <= 7; lag++) {
     let corr = 0;
@@ -224,11 +222,11 @@ export function detectBodyRocking(motionHistory) {
       corr += (recent[i] - mean) * (recent[i + lag] - mean);
     }
     corr /= (recent.length - lag) * variance;
-    if (corr > 0.25) rockScore++;
+    if (corr > 0.15) rockScore++;
   }
 
   const confidence = Math.min(100, rockScore * 22);
-  return { detected: confidence >= 55, confidence };
+  return { detected: confidence >= 40, confidence };
 }
 
 /**
@@ -247,10 +245,10 @@ export function detectJerkyMovements(motionHistory) {
   let spikeCount = 0;
   for (let i = 1; i < recent.length; i++) {
     const delta = Math.abs(recent[i] - recent[i - 1]);
-    if (delta > Math.max(mean * 2.0, std * 2.5)) spikeCount++;
+    if (delta > Math.max(mean * 1.5, std * 2.0)) spikeCount++;
   }
 
-  return { detected: spikeCount >= 3, count: spikeCount };
+  return { detected: spikeCount >= 2, count: spikeCount };
 }
 
 /**
@@ -271,9 +269,8 @@ export function detectHandFlapping(gridHistory) {
   });
 
   const mean = upperMotions.reduce((a, b) => a + b, 0) / upperMotions.length;
-  if (mean < 5) return { detected: false, confidence: 0 };
+  if (mean < 3) return { detected: false, confidence: 0 };
 
-  // 고주파 = 평균 위/아래 교차 횟수 많음
   let crossings  = 0;
   let prevAbove  = upperMotions[0] >= mean;
   for (let i = 1; i < upperMotions.length; i++) {
@@ -282,7 +279,7 @@ export function detectHandFlapping(gridHistory) {
   }
 
   const confidence = Math.min(100, crossings * 9);
-  return { detected: crossings >= 6 && confidence > 45, confidence };
+  return { detected: crossings >= 4 && confidence > 30, confidence };
 }
 
 /**
@@ -305,16 +302,16 @@ export function detectSpinning(gridHistory) {
     return colTotals.indexOf(Math.max(...colTotals));
   });
 
-  // 피크 열이 좌↔우↔좌 방향 전환 횟수
+  // 피크 열이 좌↔우↔좌 방향 전환 횟수 — 폭 2 이상의 이동만 유효로 인정
   let dirChanges = 0;
   for (let i = 2; i < peakCols.length; i++) {
     const d1 = peakCols[i - 1] - peakCols[i - 2];
     const d2 = peakCols[i]     - peakCols[i - 1];
-    if ((d1 > 1 && d2 < -1) || (d1 < -1 && d2 > 1)) dirChanges++;
+    if ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) dirChanges++;
   }
 
   const confidence = Math.min(100, dirChanges * 25);
-  return { detected: dirChanges >= 3, confidence };
+  return { detected: dirChanges >= 2, confidence };
 }
 
 /**
@@ -372,7 +369,7 @@ export function computeSessionScore(sessionData) {
     ? motionHistory.reduce((a, b) => a + b, 0) / motionHistory.length
     : 0;
   const maxMotion = motionHistory.length > 0 ? Math.max(...motionHistory) : 0;
-  if (!jerky.detected && maxMotion > avgMotion * 4 && maxMotion > 20) {
+  if (!jerky.detected && maxMotion > avgMotion * 3 && maxMotion > 10) {
     attentionFlags.push("갑작스럽고 충동적인 큰 움직임이 관찰됨");
     deduction += 10;
   }
@@ -389,7 +386,7 @@ export function computeSessionScore(sessionData) {
   // ⑧ 안겼을 때 신체 경직 — 카메라 관찰로 감지 불가 → Claude Vision 단독
 
   // ⑨ 주변 자극 무관심 (무반응)
-  if (avgMotion < 3 && motionHistory.length > 10) {
+  if (avgMotion < 4 && motionHistory.length > 8) {
     attentionFlags.push("주변 자극에 대한 반응 움직임이 매우 적게 관찰됨");
     deduction += 15;
   }
@@ -405,7 +402,7 @@ export function computeSessionScore(sessionData) {
   }
 
   // 단조로운 움직임 패턴
-  if (complexity.complexity < 20 && avgMotion > 5) {
+  if (complexity.complexity < 25 && avgMotion > 3) {
     attentionFlags.push("움직임 다양성이 낮고 단조로운 패턴이 관찰됨");
     deduction += 10;
   }

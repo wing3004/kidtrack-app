@@ -91,6 +91,12 @@ router.post("/frames", upload.array("frames", 30), async (req, res) => {
 ${hintText}
 아래 JSON 형식으로만 응답하세요. 반드시 한국어로 작성하세요. 다른 텍스트 없이 JSON만 출력하세요.
 
+판단 기준:
+- observed: true 는 해당 행동이 영상에서 한 번이라도 관찰된 경우 사용합니다.
+- 단발적이거나 짧게 나타난 경우에도 observed: true 로 기록하고, frequency를 "occasional"로 표시합니다.
+- 가능성이 있다고 판단되면 observed: true 를 선택하고 note에 관찰 내용을 기록합니다.
+- attentionNeeded: true 는 9가지 항목 중 1개라도 관찰 가능성이 있는 경우 사용합니다.
+
 behaviors 배열은 반드시 아래 9개 항목을 순서 그대로 포함해야 합니다.
 각 항목을 영상에서 관찰하고 observed / frequency / note를 작성하세요.
 
